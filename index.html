@@ -3,42 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>期货行情图表分析</title>
-    <link rel="stylesheet" href="style.css">
+    <title>期货数据分析图表</title>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <div class="container">
-        <h1>期货行情数据看板</h1>
-
+        <!-- 控制面板 -->
         <div class="control-panel">
             <div class="control-group">
-                <label for="contract-select">选择合约</label>
+                <label for="contract-select">选择品种：</label>
                 <select id="contract-select">
                     <option value="">加载中...</option>
                 </select>
             </div>
-
             <div class="control-group">
-                <label for="start-date">开始日期</label>
+                <label for="start-date">开始日期：</label>
                 <input type="date" id="start-date">
             </div>
-
             <div class="control-group">
-                <label for="end-date">结束日期</label>
+                <label for="end-date">结束日期：</label>
                 <input type="date" id="end-date">
             </div>
-        </div>
-
-        <div id="stats-panel" class="stats-panel">
+            <div class="control-group">
+                <button id="update-btn">更新图表</button>
+                <button id="reset-btn">重置日期</button>
             </div>
-
-        <div id="charts-container">
-            <div class="loading">等待选择数据...</div>
         </div>
+
+        <!-- 图表区域 -->
+        <div id="charts-container">
+            <div id="chart-kline" class="chart main-chart"></div>
+            <div id="chart-volume" class="chart sub-chart"></div>
+            <div id="chart-oi" class="chart sub-chart"></div>
+            <div id="chart-position" class="chart sub-chart"></div>
+            <div id="chart-iv" class="chart sub-chart"></div>
+            <div id="chart-cb" class="chart sub-chart"></div>
+        </div>
+
+        <!-- 数据统计 -->
+        <div id="stats-panel" class="stats-panel"></div>
     </div>
 
-    <script src="csv-parser.js"></script>
-    <script src="app.js"></script>
+    <script src="js/csv-parser.js"></script>
+    <script src="js/app.js"></script>
 </body>
 </html>
