@@ -72,16 +72,15 @@ function initCharts() {
     });
 }
 
-// ==================== 联动：每次绘图后重新绑定 ====================
+// ==================== 联动 ====================
 let _syncing = false;
 
 function setupChartLinkage() {
     const chartList = Object.values(CONFIG.charts).filter(Boolean);
 
-    // 缩放联动
+    // 缩放联动：所有图表共享 dataZoom 状态（滚轮缩放同步）
     echarts.connect(chartList);
 
-    // 解绑旧事件，重新绑定（clear 后必须重新绑）
     chartList.forEach(src => {
         src.off('updateAxisPointer');
         src.off('globalout');
@@ -89,12 +88,13 @@ function setupChartLinkage() {
         src.on('updateAxisPointer', (evt) => {
             if (_syncing) return;
 
+            // ★ 优先用 dataIndex，回退用 axesInfo 中的 x 轴坐标
             let idx = evt.dataIndex;
             if (typeof idx !== 'number') {
                 const xInfo = evt.axesInfo && evt.axesInfo.find(a => a.axisDim === 'x');
                 if (xInfo) {
                     const v = xInfo.value;
-                    idx = (typeof v === 'number') ? v : CONFIG.currentDates.indexOf(String(v));
+                    idx = typeof v === 'number' ? v : CONFIG.currentDates.indexOf(String(v));
                 }
             }
             if (typeof idx !== 'number' || idx < 0) return;
@@ -128,7 +128,6 @@ async function loadChartData(filename) {
 
         CONFIG.rawData = rawData;
         CONFIG.currentFile = filename;
-
         updateDateRange(rawData);
 
         const startDate = document.getElementById('start-date').value;
@@ -137,10 +136,8 @@ async function loadChartData(filename) {
         const chartData = processChartData(filtered);
         CONFIG.currentDates = chartData.dates;
 
-        // ★ 彻底清空所有图表（防止切换品种后旧数据残留）
-        Object.values(CONFIG.charts).forEach(c => { if (c) c.clear(); });
-
-        // ★ 六图全部重绘
+        // ★ 不调用 clear()，直接用 notMerge:true 的 setOption 完整替换
+        // clear() 会破坏 echarts.connect 的分组，导致缩放联动失效
         drawKlineChart(chartData);
         drawVolumeChart(chartData);
         drawOIChart(chartData);
@@ -148,7 +145,7 @@ async function loadChartData(filename) {
         drawIVChart(chartData);
         drawCBChart(chartData);
 
-        // ★ 绘图完成后重新挂联动（clear 会销毁旧的事件监听）
+        // 绘图后重新绑定悬浮联动
         setupChartLinkage();
 
         hideOverlay();
@@ -179,6 +176,7 @@ function processChartData(rawData) {
     const homieNet = [], instNet = [], iv = [], ivPct = [], cb = [], ma20 = [];
 
     rawData.forEach(row => {
+        // yymmdd 格式
         let ds = row[''] || row['日期'] || row['date'];
         ds = String(typeof ds === 'number' ? ds : ds).split(' ')[0].replace(/-/g, '');
         dates.push(ds.length === 8 ? ds.substring(2) : ds);
@@ -228,7 +226,7 @@ function makeXAxis(dates, showLabel) {
                 fontSize: 10,
                 color: '#666',
                 interval: Math.max(0, Math.floor(dates.length / 13) - 1),
-                formatter: v => v
+                formatter: v => v   // dates 已是 yymmdd，直接用
             }
             : { show: false }
     };
@@ -244,7 +242,12 @@ function makeGrid(extraBottom) {
     };
 }
 
-// 副图通用 tooltip（不含日期）
+// ★ 所有图表统一的缩放配置：只用 inside（滚轮），不显示底部 slider bar
+function makeZoom() {
+    return [{ type: 'inside', xAxisIndex: [0], start: 50, end: 100 }];
+}
+
+// 副图 tooltip（不含日期）
 function makeSubTooltip(formatter) {
     return {
         trigger:      'axis',
@@ -258,27 +261,21 @@ function makeSubTooltip(formatter) {
     };
 }
 
-function makeSubZoom() {
-    return [{ type: 'inside', xAxisIndex: [0], start: 50, end: 100 }];
-}
-
 // ==================== 绘图函数 ====================
 
 function drawKlineChart(data) {
+    // ★ 在 formatter 闭包里直接引用 data.dates，不依赖 params.name
+    //    这样保证 tooltip 里的日期始终是完整的 yymmdd
     CONFIG.charts.kline.setOption({
         title:  { text: '价格走势', left: 'center', textStyle: { fontSize: 16 } },
         legend: { data: ['K线', 'MA20'], top: 28 },
-        grid:   makeGrid(50),
+        grid:   makeGrid(),          // ★ 不再给 slider 留 extraBottom
         xAxis:  makeXAxis(data.dates, true),
         yAxis: {
             type: 'value', scale: true, splitArea: { show: true }, position: 'left',
             axisLabel: { fontSize: 11 }
         },
-        dataZoom: [
-            { type: 'inside', xAxisIndex: [0], start: 50, end: 100 },
-            { type: 'slider', xAxisIndex: [0], start: 50, end: 100, height: 20, bottom: 10, handleSize: 14 }
-        ],
-        // ★ 主图 tooltip：日期 + 开/收/高/低 + MA20
+        dataZoom: makeZoom(),        // ★ 只用 inside，无 slider bar
         tooltip: {
             trigger:      'axis',
             confine:      true,
@@ -288,16 +285,22 @@ function drawKlineChart(data) {
                 lineStyle: { color: 'rgba(80,80,80,0.45)', type: 'dashed', width: 1 }
             },
             formatter(params) {
+                // ★ 用 dataIndex 从 data.dates 取日期，保证是完整 yymmdd
+                const idx = params[0] && params[0].dataIndex;
+                const dateStr = (idx != null && data.dates[idx]) ? data.dates[idx] : (params[0] && params[0].name) || '';
+
                 const k = params.find(p => p.seriesName === 'K线');
                 const m = params.find(p => p.seriesName === 'MA20');
                 if (!k) return '';
+
                 const [o, c, l, h] = k.value;
-                const clr = c >= o ? COLORS.up : COLORS.down;
-                const chg = o > 0 ? ((c - o) / o * 100) : 0;
+                const clr    = c >= o ? COLORS.up : COLORS.down;
+                const chg    = o > 0 ? ((c - o) / o * 100) : 0;
                 const chgStr = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
+
                 return `<div style="font-size:12px;line-height:2;min-width:170px">
-                    <div style="font-weight:700;border-bottom:1px solid #eee;padding-bottom:4px;margin-bottom:4px">
-                        交易日期：${k.name}
+                    <div style="font-weight:700;border-bottom:1px solid #eee;padding-bottom:3px;margin-bottom:3px">
+                        交易日期：${dateStr}
                     </div>
                     <div>开盘价：<b>${fmtPrice(o)}</b></div>
                     <div>收盘价：<b style="color:${clr}">${fmtPrice(c)}</b>&ensp;<span style="color:${clr};font-size:11px">${chgStr}</span></div>
@@ -313,8 +316,8 @@ function drawKlineChart(data) {
             {
                 name: 'K线', type: 'candlestick', data: data.ohlc,
                 itemStyle: {
-                    color: COLORS.up, color0: COLORS.down,
-                    borderColor: COLORS.up, borderColor0: COLORS.down
+                    color:        COLORS.up,   color0:        COLORS.down,
+                    borderColor:  COLORS.up,   borderColor0:  COLORS.down
                 }
             },
             {
@@ -328,19 +331,19 @@ function drawKlineChart(data) {
 
 function drawVolumeChart(data) {
     CONFIG.charts.volume.setOption({
-        title:  { text: '成交量', left: 'center', textStyle: { fontSize: 14 } },
-        grid:   makeGrid(),
-        xAxis:  makeXAxis(data.dates, false),
-        yAxis: {
+        title:    { text: '成交量', left: 'center', textStyle: { fontSize: 14 } },
+        grid:     makeGrid(),
+        xAxis:    makeXAxis(data.dates, false),
+        yAxis:    {
             type: 'value', splitArea: { show: true },
             axisLabel: { formatter: v => fmtNum(v), fontSize: 11 }
         },
-        dataZoom: makeSubZoom(),
-        tooltip: makeSubTooltip((params) => {
+        dataZoom: makeZoom(),
+        tooltip:  makeSubTooltip((params) => {
             const p = params[0];
             if (!p) return '';
             return `<div style="font-size:12px;line-height:1.9">
-                <span style="color:${COLORS.volume}">●</span> 成交量&nbsp;<b>${fmtNum(p.value)}</b>
+                <span style="color:${COLORS.volume}">●</span>&nbsp;成交量&nbsp;<b>${fmtNum(p.value)}</b>
             </div>`;
         }),
         series: [{
@@ -366,13 +369,13 @@ function drawOIChart(data) {
                 axisLabel: { formatter: v => v.toFixed(1) + '%', fontSize: 11 }
             }
         ],
-        dataZoom: makeSubZoom(),
+        dataZoom: makeZoom(),
         tooltip: makeSubTooltip((params) => {
             const oiP = params.find(p => p.seriesName === '持仓量');
             const chP = params.find(p => p.seriesName === '持仓量变幅');
             return `<div style="font-size:12px;line-height:1.9">
-                ${oiP ? `<span style="color:${COLORS.oi}">●</span> 持仓量&nbsp;<b>${fmtNum(oiP.value)}</b><br/>` : ''}
-                ${chP ? `<span style="color:${COLORS.oiChange}">●</span> 持仓量变幅&nbsp;<b>${fmtPct1(chP.value)}</b>` : ''}
+                ${oiP ? `<span style="color:${COLORS.oi}">●</span>&nbsp;持仓量&nbsp;<b>${fmtNum(oiP.value)}</b><br/>` : ''}
+                ${chP ? `<span style="color:${COLORS.oiChange}">●</span>&nbsp;持仓量变幅&nbsp;<b>${fmtPct1(chP.value)}</b>` : ''}
             </div>`;
         }),
         series: [
@@ -404,13 +407,13 @@ function drawPositionChart(data) {
             type: 'value', splitArea: { show: true },
             axisLabel: { formatter: v => fmtNum(v), fontSize: 11 }
         },
-        dataZoom: makeSubZoom(),
+        dataZoom: makeZoom(),
         tooltip: makeSubTooltip((params) => {
             const h = params.find(p => p.seriesName === '家人净持仓');
             const i = params.find(p => p.seriesName === '机构净持仓');
             return `<div style="font-size:12px;line-height:1.9">
-                ${h ? `<span style="color:${COLORS.homie}">●</span> 家人净持仓&nbsp;<b>${fmtNum(h.value)}</b><br/>` : ''}
-                ${i ? `<span style="color:${COLORS.inst}">●</span> 机构净持仓&nbsp;<b>${fmtNum(i.value)}</b>` : ''}
+                ${h ? `<span style="color:${COLORS.homie}">●</span>&nbsp;家人净持仓&nbsp;<b>${fmtNum(h.value)}</b><br/>` : ''}
+                ${i ? `<span style="color:${COLORS.inst}">●</span>&nbsp;机构净持仓&nbsp;<b>${fmtNum(i.value)}</b>` : ''}
             </div>`;
         }),
         series: [
@@ -420,7 +423,7 @@ function drawPositionChart(data) {
                 markLine: {
                     silent: true, symbol: 'none',
                     data: [{ yAxis: 0 }],
-                    lineStyle: { color: '#333333', type: 'dashed', width: 1.5 }
+                    lineStyle: { color: '#333', type: 'dashed', width: 1.5 }
                 }
             },
             {
@@ -448,19 +451,20 @@ function drawIVChart(data) {
                 axisLabel: { formatter: v => v.toFixed(1) + '%', fontSize: 11 }
             }
         ],
-        dataZoom: makeSubZoom(),
+        dataZoom: makeZoom(),
         tooltip: makeSubTooltip((params) => {
             const ivP    = params.find(p => p.seriesName === 'IV');
             const ivPctP = params.find(p => p.seriesName === 'IV60日分位数');
             return `<div style="font-size:12px;line-height:1.9">
-                ${ivP    ? `<span style="color:${COLORS.iv}">●</span> IV&nbsp;<b>${fmtPct1(ivP.value)}</b><br/>` : ''}
-                ${ivPctP ? `<span style="color:${COLORS.ivPct}">●</span> IV分位数&nbsp;<b>${fmtPct1(ivPctP.value)}</b>` : ''}
+                ${ivP    ? `<span style="color:${COLORS.iv}">●</span>&nbsp;IV&nbsp;<b>${fmtPct1(ivP.value)}</b><br/>` : ''}
+                ${ivPctP ? `<span style="color:${COLORS.ivPct}">●</span>&nbsp;IV分位数&nbsp;<b>${fmtPct1(ivPctP.value)}</b>` : ''}
             </div>`;
         }),
         series: [
             {
                 name: 'IV', type: 'line', data: data.iv,
-                lineStyle: { color: COLORS.iv, width: 2 }, symbol: 'circle', symbolSize: 3, connectNulls: true
+                lineStyle: { color: COLORS.iv, width: 2 }, symbol: 'circle', symbolSize: 3,
+                connectNulls: true
             },
             {
                 name: 'IV60日分位数', type: 'line', yAxisIndex: 1, data: data.ivPct,
@@ -473,24 +477,25 @@ function drawIVChart(data) {
 
 function drawCBChart(data) {
     CONFIG.charts.cb.setOption({
-        title: { text: '期限结构分数', left: 'center', textStyle: { fontSize: 14 } },
-        grid:  makeGrid(),
-        xAxis: makeXAxis(data.dates, false),
-        yAxis: {
+        title:    { text: '期限结构分数', left: 'center', textStyle: { fontSize: 14 } },
+        grid:     makeGrid(),
+        xAxis:    makeXAxis(data.dates, false),
+        yAxis:    {
             type: 'value', splitArea: { show: true },
             axisLabel: { formatter: v => v.toFixed(2), fontSize: 11 }
         },
-        dataZoom: makeSubZoom(),
-        tooltip: makeSubTooltip((params) => {
+        dataZoom: makeZoom(),
+        tooltip:  makeSubTooltip((params) => {
             const p = params[0];
             if (!p) return '';
             return `<div style="font-size:12px;line-height:1.9">
-                <span style="color:${COLORS.cb}">●</span> 期限结构分数&nbsp;<b>${fmtCB(p.value)}</b>
+                <span style="color:${COLORS.cb}">●</span>&nbsp;期限结构分数&nbsp;<b>${fmtCB(p.value)}</b>
             </div>`;
         }),
         series: [{
             name: '期限结构', type: 'line', data: data.cb,
-            lineStyle: { color: COLORS.cb, width: 2 }, symbol: 'circle', symbolSize: 3, connectNulls: true,
+            lineStyle: { color: COLORS.cb, width: 2 }, symbol: 'circle', symbolSize: 3,
+            connectNulls: true,
             markLine: {
                 silent: true, symbol: 'none',
                 data: [{ yAxis: 0 }],
