@@ -1,4 +1,6 @@
-// 全局配置
+// js/app.js
+
+// ==================== 全局配置 ====================
 const CONFIG = {
     dataPath: 'data/',
     charts: {
@@ -10,30 +12,40 @@ const CONFIG = {
         cb: null
     },
     currentData: null,
-    currentContract: null
+    currentContract: null,
+    // 统一的网格布局配置，确保所有图表左右对齐
+  grid: {
+        left: '8%',    // 统一左侧边距
+        right: '8%',   // 统一右侧边距（为右侧Y轴预留空间）
+        top: '15%',
+        bottom: '10%'
+    }
 };
 
 // 颜色配置
 const COLORS = {
-    up: '#ef5350',
-    down: '#26a69a',
-    ma20: '#ffa726',
-    volume: '#78909c',
-    oi: '#42a5f5',
-    oiChange: '#ef5350',
-    homie: '#ec407a',
-    inst: '#ab47bc',
-    iv: '#42a5f5',
-    ivPct: '#66bb6a',
-    cb: '#8d6e63'
+    up: '#ef5350',      // 上涨红色
+    down: '#26a69a',    // 下跌绿色
+    ma20: '#ffa726',    // MA20橙色
+    volume: '#78909c',  // 成交量灰色
+    oi: '#42a5f5',      // 持仓量蓝色
+    oiChange: '#ef5350', // 持仓量变幅红色
+    homie: '#ec407a',   // 家人粉色
+    inst: '#ab47bc',    // 机构紫色
+    iv: '#42a5f5',      // IV蓝色
+    ivPct: '#66bb6a',   // IV分位数绿色
+    cb: '#8d6e63'       // 期限结构棕色
 };
 
-// 初始化
+// ==================== 初始化 ====================
 document.addEventListener('DOMContentLoaded', async () => {
     await initContractSelect();
     initEventListeners();
     initCharts();
-
+    
+    // 初始化图表联动
+    setupChartLinkage();
+    
     const select = document.getElementById('contract-select');
     if (select.options.length > 0) {
         select.selectedIndex = 0;
@@ -47,19 +59,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function initContractSelect() {
     const select = document.getElementById('contract-select');
     select.innerHTML = '<option value="">加载中...</option>';
-
+    
     try {
         const response = await fetch(CONFIG.dataPath + 'manifest.json');
-        let files = [];
-
-        if (response.ok) {
-            files = await response.json();
-        } else {
-            console.log('manifest.json not found');
-            select.innerHTML = '<option value="">未找到数据文件</option>';
-            return;
-        }
-
+        if (!response.ok) throw new Error('未找到manifest.json');
+        
+        const files = await response.json();
         select.innerHTML = '';
         files.forEach(file => {
             const option = document.createElement('option');
@@ -67,7 +72,6 @@ async function initContractSelect() {
             option.textContent = file.display_name;
             select.appendChild(option);
         });
-
     } catch (error) {
         console.error('加载品种列表失败:', error);
         select.innerHTML = '<option value="">加载失败</option>';
@@ -79,25 +83,19 @@ async function initContractSelect() {
  */
 function initEventListeners() {
     document.getElementById('contract-select').addEventListener('change', async (e) => {
-        if (e.target.value) {
-            await loadChartData(e.target.value);
-        }
+        if (e.target.value) await loadChartData(e.target.value);
     });
-
+    
     document.getElementById('update-btn').addEventListener('click', async () => {
         const select = document.getElementById('contract-select');
-        if (select.value) {
-            await loadChartData(select.value);
-        }
+        if (select.value) await loadChartData(select.value);
     });
-
+    
     document.getElementById('reset-btn').addEventListener('click', () => {
         document.getElementById('start-date').value = '';
         document.getElementById('end-date').value = '';
         const select = document.getElementById('contract-select');
-        if (select.value) {
-            loadChartData(select.value);
-        }
+        if (select.value) loadChartData(select.value);
     });
 }
 
@@ -113,34 +111,16 @@ function initCharts() {
     CONFIG.charts.cb       = echarts.init(document.getElementById('chart-cb'));
 
     window.addEventListener('resize', () => {
-        Object.values(CONFIG.charts).forEach(chart => {
-            if (chart) chart.resize();
-        });
+        Object.values(CONFIG.charts).forEach(chart => chart && chart.resize());
     });
-
-    setupChartLinkage();
 }
 
 /**
- * 设置图表联动
+ * 设置图表联动 (关键修改：使用 connect 实现真正的坐标统一)
  */
 function setupChartLinkage() {
-    const charts = Object.values(CONFIG.charts);
-
-    charts.forEach(chart => {
-        chart.on('datazoom', (params) => {
-            charts.forEach(otherChart => {
-                if (otherChart !== chart) {
-                    otherChart.dispatchAction({
-                        type: 'dataZoom',
-                        dataZoomIndex: params.dataZoomIndex,
-                        start: params.start,
-                        end: params.end
-                    });
-                }
-            });
-        });
-    });
+    // 将所有图表实例组成一个组，实现联动
+    echarts.connect(Object.values(CONFIG.charts));
 }
 
 /**
@@ -148,29 +128,26 @@ function setupChartLinkage() {
  */
 async function loadChartData(filename) {
     showLoading();
-
     try {
         const response = await fetch(CONFIG.dataPath + filename);
+        if (!response.ok) throw new Error('文件不存在');
+        
         const text = await response.text();
         const rawData = CSVParser.parse(text);
-
-        if (rawData.length === 0) {
-            throw new Error('数据为空');
-        }
+        
+        if (rawData.length === 0) throw new Error('数据为空');
 
         CONFIG.currentData = rawData;
         CONFIG.currentContract = filename;
 
+        // 日期筛选逻辑 (略，保持原样)
         const startDate = document.getElementById('start-date').value;
-        const endDate   = document.getElementById('end-date').value;
-
+        const endDate = document.getElementById('end-date').value;
         let filteredData = rawData;
-
         if (startDate || endDate) {
             filteredData = rawData.filter(row => {
                 const rowDate = row[''] || row['日期'] || row['date'];
                 if (!rowDate) return true;
-
                 let dateStr = typeof rowDate === 'number' ? rowDate.toString() : rowDate;
                 let formattedDate;
                 if (dateStr.length === 8) {
@@ -178,15 +155,13 @@ async function loadChartData(filename) {
                 } else {
                     formattedDate = dateStr.split(' ')[0];
                 }
-
                 if (startDate && formattedDate < startDate) return false;
-                if (endDate   && formattedDate > endDate)   return false;
+                if (endDate && formattedDate > endDate) return false;
                 return true;
             });
         }
 
         updateDateRange(rawData);
-
         const chartData = processChartData(filteredData);
 
         drawKlineChart(chartData);
@@ -200,27 +175,36 @@ async function loadChartData(filename) {
         updateStatsPanel(chartData);
 
     } catch (error) {
-        console.error('加载图表数据失败:', error);
+        console.error('加载失败:', error);
         showError('加载数据失败: ' + error.message);
     }
 }
 
 /**
- * 处理图表数据
+ * 处理图表数据 (关键修改：统一日期格式为 yymmdd)
  */
 function processChartData(rawData) {
     const dates = [], ohlc = [], volumes = [], oi = [], oiChange = [];
     const homieNet = [], instNet = [], iv = [], ivPct = [], cb = [], ma20 = [];
 
     rawData.forEach(row => {
+        // --- 日期格式化处理 ---
         let dateStr = row[''] || row['日期'] || row['date'];
         if (typeof dateStr === 'number') {
             dateStr = dateStr.toString();
-            dateStr = `${dateStr.substr(0, 4)}-${dateStr.substr(4, 2)}-${dateStr.substr(6, 2)}`;
-        } else if (dateStr) {
-            dateStr = dateStr.split(' ')[0];
         }
-        dates.push(dateStr);
+        // 去除可能的时间部分
+        dateStr = dateStr.split(' ')[0];
+        // 去除横杠
+        dateStr = dateStr.replace(/-/g, '');
+        
+        // 转换为 yymmdd (例如: 230801)
+        if (dateStr.length === 8) {
+            dates.push(dateStr.substring(2));
+        } else {
+            dates.push(dateStr); // 异常格式原样保留
+        }
+        // ---------------------
 
         ohlc.push([
             row['开盘价'] || row['open'],
@@ -234,13 +218,8 @@ function processChartData(rawData) {
         oi.push(row['持仓量'] || row['oi']);
         oiChange.push((row['持仓量变幅'] || 0) * 100);
 
-        const homieLong  = row['家人多头持仓量'] || 0;
-        const homieShort = row['家人空头持仓量'] || 0;
-        homieNet.push(homieLong + homieShort);
-
-        const instLong  = row['机构多头持仓量'] || 0;
-        const instShort = row['机构空头持仓量'] || 0;
-        instNet.push(instLong + instShort);
+        homieNet.push((row['家人多头持仓量'] || 0) + (row['家人空头持仓量'] || 0));
+        instNet.push((row['机构多头持仓量'] || 0) + (row['机构空头持仓量'] || 0));
 
         iv.push(row['IV']);
         ivPct.push((row['IV_pct'] || 0) * 100);
@@ -250,282 +229,148 @@ function processChartData(rawData) {
     return { dates, ohlc, volumes, oi, oiChange, homieNet, instNet, iv, ivPct, cb, ma20 };
 }
 
+// ==================== 绘图函数 ====================
+
 /**
- * 绘制K线图
+ * 绘制K线图 (主图)
  */
 function drawKlineChart(data) {
     CONFIG.charts.kline.setOption({
-        title: {
-            text: '价格走势 (主图)',
-            left: 'center',
-            textStyle: { fontSize: 16, fontWeight: 'bold' }
-        },
-        tooltip: {
-            trigger: 'axis',
-            axisPointer: { type: 'cross' },
-            formatter: function(params) {
-                let result = `<div style="font-weight:bold;margin-bottom:5px;">${params[0].axisValue}</div>`;
-                params.forEach(param => {
-                    if (param.seriesName === 'K线') {
-                        const v = param.data;
-                        result += `<div>开盘: ${v[1].toFixed(2)}</div>`;
-                        result += `<div>收盘: <span style="color:${v[1] <= v[2] ? COLORS.up : COLORS.down}">${v[2].toFixed(2)}</span></div>`;
-                        result += `<div>最低: ${v[3].toFixed(2)}</div>`;
-                        result += `<div>最高: ${v[4].toFixed(2)}</div>`;
-                    } else if (param.seriesName === 'MA20') {
-                        result += `<div>MA20: ${param.data?.toFixed(2) || '-'}</div>`;
-                    }
-                });
-                return result;
-            }
-        },
+        title: { text: '价格走势', left: 'center', textStyle: { fontSize: 16 } },
+        tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
         legend: { data: ['K线', 'MA20'], top: 30 },
-        grid: { left: '10%', right: '5%', top: 80, bottom: 80 },
-        xAxis: { type: 'category', data: data.dates, axisLabel: { rotate: 45 } },
-        yAxis: { type: 'value', scale: true, splitArea: { show: true } },
-        dataZoom: [
-            { type: 'inside', start: 50, end: 100 },
-            { type: 'slider', start: 50, end: 100, height: 30 }
-        ],
-        series: [
-            {
-                name: 'K线',
-                type: 'candlestick',
-                data: data.ohlc,
-                itemStyle: {
-                    color: COLORS.up,
-                    color0: COLORS.down,
-                    borderColor: COLORS.up,
-                    borderColor0: COLORS.down
-                }
+        // 使用统一的网格配置
+        grid: { left: CONFIG.grid.left, right: CONFIG.grid.right, top: 80, bottom: 50 },
+        xAxis: {
+            type: 'category',
+            data: data.dates,
+            // 仅在主图显示标签
+            axisLabel: { 
+                show: true,
+                rotate: 45, // 旋转防止重叠
+                fontSize: 10
             },
-            {
-                name: 'MA20',
-                type: 'line',
-                data: data.ma20,
-                smooth: true,
-                lineStyle: { width: 2, color: COLORS.ma20 },
-                symbol: 'none'
-            }
-        ]
-    }, true);
-}
-
-/**
- * 绘制成交量图
- */
-function drawVolumeChart(data) {
-    CONFIG.charts.volume.setOption({
-        title: { text: '成交量', left: 'center', textStyle: { fontSize: 14 } },
-        tooltip: {
-            trigger: 'axis',
-            formatter: params =>
-                `<div style="font-weight:bold;">${params[0].axisValue}</div><div>成交量: ${formatNumber(params[0].data)}</div>`
+            axisTick: { alignWithLabel: true }
         },
-        grid: { left: '10%', right: '5%', top: 50, bottom: 30 },
-        xAxis: { type: 'category', data: data.dates, axisLabel: { show: false } },
-        yAxis: {
-            type: 'value',
+        yAxis: { 
+            type: 'value', 
+            scale: true, 
             splitArea: { show: true },
-            axisLabel: { formatter: v => formatNumber(v) }
+            position: 'left'
         },
-        series: [{
-            name: '成交量',
-            type: 'bar',
-            data: data.volumes,
-            itemStyle: { color: COLORS.volume }
-        }]
+        dataZoom: [
+            { type: 'inside', xAxisIndex: [0], start: 50, end: 100 },
+            { type: 'slider', xAxisIndex: [0], start: 50, end: 100, height: 20, bottom: 10 }
+        ],
+        series: [
+            {
+                name: 'K线', type: 'candlestick', data: data.ohlc,
+                itemStyle: { color: COLORS.up, color0: COLORS.down, borderColor: COLORS.up, borderColor0: COLORS.down }
+            },
+            {
+                name: 'MA20', type: 'line', data: data.ma20,
+                smooth: true, lineStyle: { width: 2, color: COLORS.ma20 }, symbol: 'none'
+            }
+        ]
     }, true);
 }
 
 /**
- * 绘制持仓量图
+ * 绘制副图通用配置
  */
+function getSubChartOptions(titleText, yAxisName) {
+    return {
+        title: { text: titleText, left: 'center', textStyle: { fontSize: 14 } },
+        tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+        // 关键：使用完全相同的网格配置，保证垂直对齐
+        grid: { left: CONFIG.grid.left, right: CONFIG.grid.right, top: 50, bottom: 10 },
+        xAxis: {
+            type: 'category',
+            data: [], // 数据由各函数填充
+            // 关键：副图隐藏X轴标签
+            axisLabel: { show: false },
+            axisTick: { show: false },
+            axisLine: { show: false }
+        },
+        yAxis: { 
+            type: 'value', 
+            name: yAxisName,
+            splitArea: { show: true },
+            position: 'left'
+        }
+    };
+}
+
+function drawVolumeChart(data) {
+    const option = getSubChartOptions('成交量', '');
+    option.series = [{
+        name: '成交量', type: 'bar', data: data.volumes,
+        itemStyle: { color: COLORS.volume }
+    }];
+    CONFIG.charts.volume.setOption(option, true);
+}
+
 function drawOIChart(data) {
-    CONFIG.charts.oi.setOption({
-        title: { text: '持仓量 & 持仓量变幅', left: 'center', textStyle: { fontSize: 14 } },
-        tooltip: {
-            trigger: 'axis',
-            formatter: function(params) {
-                let result = `<div style="font-weight:bold;">${params[0].axisValue}</div>`;
-                params.forEach(p => {
-                    if (p.seriesName === '持仓量')     result += `<div>持仓量: ${formatNumber(p.data)}</div>`;
-                    else if (p.seriesName === '持仓量变幅') result += `<div>变幅: ${p.data?.toFixed(2) || '-'}%</div>`;
-                });
-                return result;
-            }
-        },
-        legend: { data: ['持仓量', '持仓量变幅'], top: 25 },
-        grid: { left: '10%', right: '15%', top: 60, bottom: 30 },
-        xAxis: { type: 'category', data: data.dates, axisLabel: { show: false } },
-        yAxis: [
-            {
-                type: 'value', name: '持仓量', position: 'left',
-                splitArea: { show: true },
-                axisLabel: { formatter: v => formatNumber(v) }
-            },
-            {
-                type: 'value', name: '变幅(%)', position: 'right',
-                axisLabel: { formatter: '{value}%' }
-            }
-        ],
-        series: [
-            {
-                name: '持仓量', type: 'bar', data: data.oi,
-                itemStyle: { color: COLORS.oi }
-            },
-            {
-                name: '持仓量变幅', type: 'line', yAxisIndex: 1, data: data.oiChange,
-                lineStyle: { color: COLORS.oiChange, width: 2 },
-                symbol: 'circle', symbolSize: 4
-            }
-        ]
-    }, true);
+    const option = getSubChartOptions('持仓量 & 变幅', '持仓量');
+    // 因为有右轴，需要覆盖grid right
+    option.grid.right = '12%'; // 微调右轴空间
+    option.yAxis = [
+        { type: 'value', name: '持仓量', position: 'left', splitArea: { show: true } },
+        { type: 'value', name: '变幅(%)', position: 'right', axisLabel: { formatter: '{value}%' } }
+    ];
+    option.series = [
+        { name: '持仓量', type: 'bar', data: data.oi, itemStyle: { color: COLORS.oi } },
+        { name: '持仓量变幅', type: 'line', yAxisIndex: 1, data: data.oiChange,
+          lineStyle: { color: COLORS.oiChange, width: 2 }, symbol: 'circle', symbolSize: 4 }
+    ];
+    option.legend = { data: ['持仓量', '持仓量变幅'], top: 25 };
+    CONFIG.charts.oi.setOption(option, true);
 }
 
-/**
- * 绘制持仓分析图
- */
 function drawPositionChart(data) {
-    CONFIG.charts.position.setOption({
-        title: { text: '家人 & 机构净持仓', left: 'center', textStyle: { fontSize: 14 } },
-        tooltip: {
-            trigger: 'axis',
-            formatter: function(params) {
-                let result = `<div style="font-weight:bold;">${params[0].axisValue}</div>`;
-                params.forEach(p => { result += `<div>${p.seriesName}: ${formatNumber(p.data)}</div>`; });
-                return result;
-            }
-        },
-        legend: { data: ['家人净持仓', '机构净持仓'], top: 25 },
-        grid: { left: '10%', right: '5%', top: 60, bottom: 30 },
-        xAxis: { type: 'category', data: data.dates, axisLabel: { show: false } },
-        yAxis: {
-            type: 'value', splitArea: { show: true },
-            axisLabel: { formatter: v => formatNumber(v) }
-        },
-        series: [
-            {
-                name: '家人净持仓', type: 'line', data: data.homieNet,
-                lineStyle: { color: COLORS.homie, width: 2 },
-                symbol: 'circle', symbolSize: 4,
-                areaStyle: {
-                    color: {
-                        type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-                        colorStops: [
-                            { offset: 0, color: 'rgba(236,64,122,0.3)' },
-                            { offset: 1, color: 'rgba(236,64,122,0.05)' }
-                        ]
-                    }
-                }
-            },
-            {
-                name: '机构净持仓', type: 'line', data: data.instNet,
-                lineStyle: { color: COLORS.inst, width: 2 },
-                symbol: 'circle', symbolSize: 4,
-                areaStyle: {
-                    color: {
-                        type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-                        colorStops: [
-                            { offset: 0, color: 'rgba(171,71,188,0.3)' },
-                            { offset: 1, color: 'rgba(171,71,188,0.05)' }
-                        ]
-                    }
-                }
-            }
-        ]
-    }, true);
+    const option = getSubChartOptions('家人 & 机构净持仓', '');
+    option.series = [
+        { name: '家人净持仓', type: 'line', data: data.homieNet, lineStyle: { color: COLORS.homie, width: 2 }, symbol: 'circle', symbolSize: 4 },
+        { name: '机构净持仓', type: 'line', data: data.instNet, lineStyle: { color: COLORS.inst, width: 2 }, symbol: 'circle', symbolSize: 4 }
+    ];
+    option.legend = { data: ['家人净持仓', '机构净持仓'], top: 25 };
+    CONFIG.charts.position.setOption(option, true);
 }
 
-/**
- * 绘制IV图
- */
 function drawIVChart(data) {
-    CONFIG.charts.iv.setOption({
-        title: { text: '隐含波动率 (IV)', left: 'center', textStyle: { fontSize: 14 } },
-        tooltip: {
-            trigger: 'axis',
-            formatter: function(params) {
-                let result = `<div style="font-weight:bold;">${params[0].axisValue}</div>`;
-                params.forEach(p => {
-                    if (p.seriesName === 'IV')           result += `<div>IV: ${p.data?.toFixed(2) || '-'}</div>`;
-                    else if (p.seriesName === 'IV60日分位数') result += `<div>分位数: ${p.data?.toFixed(2) || '-'}%</div>`;
-                });
-                return result;
-            }
-        },
-        legend: { data: ['IV', 'IV60日分位数'], top: 25 },
-        grid: { left: '10%', right: '15%', top: 60, bottom: 30 },
-        xAxis: { type: 'category', data: data.dates, axisLabel: { show: false } },
-        yAxis: [
-            { type: 'value', name: 'IV', position: 'left', splitArea: { show: true } },
-            {
-                type: 'value', name: '分位数(%)', position: 'right',
-                min: 0, max: 100,
-                axisLabel: { formatter: '{value}%' }
-            }
-        ],
-        series: [
-            {
-                name: 'IV', type: 'line', data: data.iv,
-                lineStyle: { color: COLORS.iv, width: 2 },
-                symbol: 'circle', symbolSize: 4
-            },
-            {
-                name: 'IV60日分位数', type: 'line', yAxisIndex: 1, data: data.ivPct,
-                lineStyle: { color: COLORS.ivPct, width: 2, type: 'dashed' },
-                symbol: 'circle', symbolSize: 4
-            }
-        ]
-    }, true);
+    const option = getSubChartOptions('隐含波动率 (IV)', 'IV');
+    option.grid.right = '12%';
+    option.yAxis = [
+        { type: 'value', name: 'IV', position: 'left', splitArea: { show: true } },
+        { type: 'value', name: '分位数(%)', position: 'right', min: 0, max: 100, axisLabel: { formatter: '{value}%' } }
+    ];
+    option.series = [
+        { name: 'IV', type: 'line', data: data.iv, lineStyle: { color: COLORS.iv, width: 2 }, symbol: 'circle', symbolSize: 4 },
+        { name: 'IV60日分位数', type: 'line', yAxisIndex: 1, data: data.ivPct,
+          lineStyle: { color: COLORS.ivPct, width: 2, type: 'dashed' }, symbol: 'circle', symbolSize: 4 }
+    ];
+    option.legend = { data: ['IV', 'IV60日分位数'], top: 25 };
+    CONFIG.charts.iv.setOption(option, true);
 }
 
-/**
- * 绘制期限结构图
- */
 function drawCBChart(data) {
-    CONFIG.charts.cb.setOption({
-        title: { text: '期限结构分数', left: 'center', textStyle: { fontSize: 14 } },
-        tooltip: {
-            trigger: 'axis',
-            formatter: params =>
-                `<div style="font-weight:bold;">${params[0].axisValue}</div><div>期限结构: ${params[0].data?.toFixed(2) || '-'}</div>`
-        },
-        grid: { left: '10%', right: '5%', top: 50, bottom: 30 },
-        xAxis: { type: 'category', data: data.dates, axisLabel: { show: false } },
-        yAxis: { type: 'value', splitArea: { show: true } },
-        series: [{
-            name: '期限结构', type: 'line', data: data.cb,
-            lineStyle: { color: COLORS.cb, width: 2 },
-            symbol: 'circle', symbolSize: 4,
-            areaStyle: {
-                color: {
-                    type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-                    colorStops: [
-                        { offset: 0, color: 'rgba(141,110,99,0.3)' },
-                        { offset: 1, color: 'rgba(141,110,99,0.05)' }
-                    ]
-                }
-            },
-            markLine: {
-                silent: true,
-                data: [{ yAxis: 0 }],
-                lineStyle: { color: '#999', type: 'dashed' }
-            }
-        }]
-    }, true);
+    const option = getSubChartOptions('期限结构分数', '');
+    option.series = [{
+        name: '期限结构', type: 'line', data: data.cb,
+        lineStyle: { color: COLORS.cb, width: 2 }, symbol: 'circle', symbolSize: 4,
+        markLine: { silent: true, data: [{ yAxis: 0 }], lineStyle: { color: '#999', type: 'dashed' } }
+    }];
+    CONFIG.charts.cb.setOption(option, true);
 }
 
-/**
- * 更新统计面板
- */
+// ==================== 辅助函数 ====================
+
 function updateStatsPanel(data) {
     const lastIdx = data.dates.length - 1;
     const prevIdx = lastIdx - 1;
-
     const lastClose = data.ohlc[lastIdx]?.[2] || 0;
     const prevClose = data.ohlc[prevIdx]?.[2] || lastClose;
-    const change    = lastClose - prevClose;
+    const change = lastClose - prevClose;
     const changePct = prevClose > 0 ? (change / prevClose * 100) : 0;
 
     const stats = [
@@ -547,65 +392,42 @@ function updateStatsPanel(data) {
     `).join('');
 }
 
-/**
- * 更新日期范围
- */
 function updateDateRange(data) {
     if (data.length === 0) return;
-
     const toDateStr = val => {
-        if (typeof val === 'number') {
-            const s = val.toString();
-            return `${s.substr(0, 4)}-${s.substr(4, 2)}-${s.substr(6, 2)}`;
-        }
-        return val?.split(' ')[0] || '';
+        if (typeof val === 'number') val = val.toString();
+        val = val.replace(/-/g, '');
+        if (val.length === 8) return `${val.substr(0, 4)}-${val.substr(4, 2)}-${val.substr(6, 2)}`;
+        return val;
     };
-
     const firstDateStr = toDateStr(data[0][''] || data[0]['日期'] || data[0]['date']);
-    const lastDateStr  = toDateStr(data[data.length - 1][''] || data[data.length - 1]['日期'] || data[data.length - 1]['date']);
-
+    const lastDateStr = toDateStr(data[data.length - 1][''] || data[data.length - 1]['日期'] || data[data.length - 1]['date']);
+    
     const startInput = document.getElementById('start-date');
-    const endInput   = document.getElementById('end-date');
-    startInput.min = firstDateStr;
-    startInput.max = lastDateStr;
-    endInput.min   = firstDateStr;
-    endInput.max   = lastDateStr;
+    const endInput = document.getElementById('end-date');
+    startInput.min = firstDateStr; startInput.max = lastDateStr;
+    endInput.min = firstDateStr; endInput.max = lastDateStr;
 }
 
-/**
- * 显示加载状态（不破坏图表容器）
- */
 function showLoading() {
     const el = document.getElementById('loading-overlay');
-    el.style.color = '#667eea';
-    el.textContent = '加载中...';
-    el.style.display = 'block';
+    if (el) { el.style.color = '#667eea'; el.textContent = '加载中...'; el.style.display = 'block'; }
 }
 
-/**
- * 显示错误信息（不破坏图表容器）
- */
-function showError(message) {
+function showError(msg) {
     const el = document.getElementById('loading-overlay');
-    el.style.color = '#dc3545';
-    el.textContent = message;
-    el.style.display = 'block';
+    if (el) { el.style.color = '#dc3545'; el.textContent = msg; el.style.display = 'block'; }
 }
 
-/**
- * 隐藏 overlay
- */
 function hideOverlay() {
-    document.getElementById('loading-overlay').style.display = 'none';
+    const el = document.getElementById('loading-overlay');
+    if (el) el.style.display = 'none';
 }
 
-/**
- * 格式化数字
- */
 function formatNumber(num) {
-    if (num === null || num === undefined) return '-';
+    if (num === null || num === undefined || isNaN(num)) return '-';
     const abs = Math.abs(num);
     if (abs >= 100000000) return (num / 100000000).toFixed(2) + '亿';
-    if (abs >= 10000)     return (num / 10000).toFixed(2) + '万';
+    if (abs >= 10000) return (num / 10000).toFixed(2) + '万';
     return num.toFixed(2);
 }
