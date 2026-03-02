@@ -1,0 +1,242 @@
+[
+  {
+    "filename": "其他 欧线EC 行情图表数据.csv",
+    "display_name": "欧线EC"
+  },
+  {
+    "filename": "农产品-油脂油料 棕榈油P 行情图表数据.csv",
+    "display_name": "棕榈油P"
+  },
+  {
+    "filename": "农产品-油脂油料 玉米C 行情图表数据.csv",
+    "display_name": "玉米C"
+  },
+  {
+    "filename": "农产品-油脂油料 花生PK 行情图表数据.csv",
+    "display_name": "花生PK"
+  },
+  {
+    "filename": "农产品-油脂油料 菜油OI 行情图表数据.csv",
+    "display_name": "菜油OI"
+  },
+  {
+    "filename": "农产品-油脂油料 菜粕RM 行情图表数据.csv",
+    "display_name": "菜粕RM"
+  },
+  {
+    "filename": "农产品-油脂油料 豆二B 行情图表数据.csv",
+    "display_name": "豆二B"
+  },
+  {
+    "filename": "农产品-油脂油料 豆油Y 行情图表数据.csv",
+    "display_name": "豆油Y"
+  },
+  {
+    "filename": "农产品-油脂油料 豆粕M 行情图表数据.csv",
+    "display_name": "豆粕M"
+  },
+  {
+    "filename": "农产品-软商品 棉花CF 行情图表数据.csv",
+    "display_name": "棉花CF"
+  },
+  {
+    "filename": "农产品-软商品 生猪LH 行情图表数据.csv",
+    "display_name": "生猪LH"
+  },
+  {
+    "filename": "农产品-软商品 白糖SR 行情图表数据.csv",
+    "display_name": "白糖SR"
+  },
+  {
+    "filename": "农产品-软商品 红枣CJ 行情图表数据.csv",
+    "display_name": "红枣CJ"
+  },
+  {
+    "filename": "农产品-软商品 苹果AP 行情图表数据.csv",
+    "display_name": "苹果AP"
+  },
+  {
+    "filename": "农产品-软商品 鸡蛋JD 行情图表数据.csv",
+    "display_name": "鸡蛋JD"
+  },
+  {
+    "filename": "国债 三十年国债TL 行情图表数据.csv",
+    "display_name": "三十年国债TL"
+  },
+  {
+    "filename": "国债 二年国债TS 行情图表数据.csv",
+    "display_name": "二年国债TS"
+  },
+  {
+    "filename": "国债 五年国债TF 行情图表数据.csv",
+    "display_name": "五年国债TF"
+  },
+  {
+    "filename": "国债 十年国债T 行情图表数据.csv",
+    "display_name": "十年国债T"
+  },
+  {
+    "filename": "工业品-其他 多晶硅PS 行情图表数据.csv",
+    "display_name": "多晶硅PS"
+  },
+  {
+    "filename": "工业品-其他 尿素UR 行情图表数据.csv",
+    "display_name": "尿素UR"
+  },
+  {
+    "filename": "工业品-其他 工业硅SI 行情图表数据.csv",
+    "display_name": "工业硅SI"
+  },
+  {
+    "filename": "工业品-其他 橡胶RU 行情图表数据.csv",
+    "display_name": "橡胶RU"
+  },
+  {
+    "filename": "工业品-其他 氧化铝AO 行情图表数据.csv",
+    "display_name": "氧化铝AO"
+  },
+  {
+    "filename": "工业品-其他 烧碱SH 行情图表数据.csv",
+    "display_name": "烧碱SH"
+  },
+  {
+    "filename": "工业品-其他 硅铁SF 行情图表数据.csv",
+    "display_name": "硅铁SF"
+  },
+  {
+    "filename": "工业品-其他 碳酸锂LC 行情图表数据.csv",
+    "display_name": "碳酸锂LC"
+  },
+  {
+    "filename": "工业品-其他 纸浆SP 行情图表数据.csv",
+    "display_name": "纸浆SP"
+  },
+  {
+    "filename": "工业品-建材 玻璃FG 行情图表数据.csv",
+    "display_name": "玻璃FG"
+  },
+  {
+    "filename": "工业品-建材 纯碱SA 行情图表数据.csv",
+    "display_name": "纯碱SA"
+  },
+  {
+    "filename": "工业品-建材 螺纹钢RB 行情图表数据.csv",
+    "display_name": "螺纹钢RB"
+  },
+  {
+    "filename": "工业品-建材 铁矿石I 行情图表数据.csv",
+    "display_name": "铁矿石I"
+  },
+  {
+    "filename": "工业品-建材 锰硅SM 行情图表数据.csv",
+    "display_name": "锰硅SM"
+  },
+  {
+    "filename": "工业品-能化 20号胶NR 行情图表数据.csv",
+    "display_name": "20号胶NR"
+  },
+  {
+    "filename": "工业品-能化 LPGPG 行情图表数据.csv",
+    "display_name": "LPGPG"
+  },
+  {
+    "filename": "工业品-能化 PTATA 行情图表数据.csv",
+    "display_name": "PTATA"
+  },
+  {
+    "filename": "工业品-能化 PVCV 行情图表数据.csv",
+    "display_name": "PVCV"
+  },
+  {
+    "filename": "工业品-能化 丁二烯橡胶BR 行情图表数据.csv",
+    "display_name": "丁二烯橡胶BR"
+  },
+  {
+    "filename": "工业品-能化 乙二醇EG 行情图表数据.csv",
+    "display_name": "乙二醇EG"
+  },
+  {
+    "filename": "工业品-能化 塑料L 行情图表数据.csv",
+    "display_name": "塑料L"
+  },
+  {
+    "filename": "工业品-能化 对二甲苯PX 行情图表数据.csv",
+    "display_name": "对二甲苯PX"
+  },
+  {
+    "filename": "工业品-能化 焦煤JM 行情图表数据.csv",
+    "display_name": "焦煤JM"
+  },
+  {
+    "filename": "工业品-能化 燃油FU 行情图表数据.csv",
+    "display_name": "燃油FU"
+  },
+  {
+    "filename": "工业品-能化 瓶片PR 行情图表数据.csv",
+    "display_name": "瓶片PR"
+  },
+  {
+    "filename": "工业品-能化 甲醇MA 行情图表数据.csv",
+    "display_name": "甲醇MA"
+  },
+  {
+    "filename": "工业品-能化 短纤PF 行情图表数据.csv",
+    "display_name": "短纤PF"
+  },
+  {
+    "filename": "工业品-能化 聚丙烯PP 行情图表数据.csv",
+    "display_name": "聚丙烯PP"
+  },
+  {
+    "filename": "工业品-能化 苯乙烯EB 行情图表数据.csv",
+    "display_name": "苯乙烯EB"
+  },
+  {
+    "filename": "有色金属 沪铅PB 行情图表数据.csv",
+    "display_name": "沪铅PB"
+  },
+  {
+    "filename": "有色金属 沪铜CU 行情图表数据.csv",
+    "display_name": "沪铜CU"
+  },
+  {
+    "filename": "有色金属 沪铝AL 行情图表数据.csv",
+    "display_name": "沪铝AL"
+  },
+  {
+    "filename": "有色金属 沪银AG 行情图表数据.csv",
+    "display_name": "沪银AG"
+  },
+  {
+    "filename": "有色金属 沪锌ZN 行情图表数据.csv",
+    "display_name": "沪锌ZN"
+  },
+  {
+    "filename": "有色金属 沪锡SN 行情图表数据.csv",
+    "display_name": "沪锡SN"
+  },
+  {
+    "filename": "有色金属 沪镍NI 行情图表数据.csv",
+    "display_name": "沪镍NI"
+  },
+  {
+    "filename": "股指 上证50IH 行情图表数据.csv",
+    "display_name": "上证50IH"
+  },
+  {
+    "filename": "股指 中证1000IM 行情图表数据.csv",
+    "display_name": "中证1000IM"
+  },
+  {
+    "filename": "股指 中证500IC 行情图表数据.csv",
+    "display_name": "中证500IC"
+  },
+  {
+    "filename": "股指 沪深300IF 行情图表数据.csv",
+    "display_name": "沪深300IF"
+  },
+  {
+    "filename": "黄金 沪金AU 行情图表数据.csv",
+    "display_name": "沪金AU"
+  }
+]
