@@ -1,27 +1,32 @@
-// CSV解析工具类
+// js/csv-parser.js
+
 class CSVParser {
     /**
      * 解析CSV文本为对象数组
-     * @param {string} text CSV文本
-     * @returns {Array} 解析后的数据数组
      */
     static parse(text) {
+        // 1. 去除可能存在的BOM头 (Python utf-8-sig 会生成这个)
+        if (text.charCodeAt(0) === 0xFEFF) {
+            text = text.slice(1);
+        }
+
         const lines = text.split('\n').filter(line => line.trim());
         if (lines.length === 0) return [];
         
-        // 解析表头
+        // 2. 解析表头
         const headers = this.parseLine(lines[0]);
         
-        // 解析数据行
+        // 3. 解析数据行
         const data = [];
         for (let i = 1; i < lines.length; i++) {
             const values = this.parseLine(lines[i]);
+            // 只有当值的数量和表头数量匹配时才处理（防止空行或格式错误）
             if (values.length === headers.length) {
                 const row = {};
                 headers.forEach((header, index) => {
+                    const cleanHeader = header.trim(); // 去除表头空格
                     const value = values[index].trim();
-                    // 尝试转换为数字
-                    row[header.trim()] = this.parseValue(value);
+                    row[cleanHeader] = this.parseValue(value);
                 });
                 data.push(row);
             }
@@ -58,7 +63,7 @@ class CSVParser {
      * 解析值（转换为合适的类型）
      */
     static parseValue(value) {
-        if (value === '' || value === 'nan' || value === 'NaN') {
+        if (value === '' || value === 'nan' || value === 'NaN' || value === 'None') {
             return null;
         }
         
@@ -69,22 +74,5 @@ class CSVParser {
         }
         
         return value;
-    }
-
-    /**
-     * 获取CSV文件列表
-     */
-    static async getCSVList(dataPath = 'data/') {
-        try {
-            const response = await fetch(dataPath + 'manifest.json');
-            if (response.ok) {
-                return await response.json();
-            }
-        } catch (e) {
-            console.log('manifest.json not found, using default list');
-        }
-        
-        // 如果没有manifest文件，返回空数组
-        return [];
     }
 }
