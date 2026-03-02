@@ -14,6 +14,27 @@ const COLORS = {
     iv: '#42a5f5', ivPct: '#66bb6a', cb: '#8d6e63'
 };
 
+// ==================== 日期工具 ====================
+/**
+ * 把任意格式的原始日期值转成 yymmdd 字符串（6位）
+ * 支持：20250219 / 2025-02-19 / 250219 / 25-02-19 等
+ */
+function toYYMMDD(raw) {
+    if (raw == null) return '';
+    // 去除空格、连字符、斜杠，只保留数字
+    const digits = String(raw).replace(/\s/g, '').replace(/[-\/]/g, '');
+    if (digits.length === 8) {
+        // yyyymmdd → yymmdd
+        return digits.substring(2, 8);   // 明确取第2~7位
+    }
+    if (digits.length === 6) {
+        // 已是 yymmdd
+        return digits;
+    }
+    // 其他情况：取最后6位兜底
+    return digits.length > 6 ? digits.slice(-6) : digits;
+}
+
 // ==================== 初始化 ====================
 document.addEventListener('DOMContentLoaded', async () => {
     await initContractSelect();
@@ -78,16 +99,12 @@ let _syncing = false;
 function setupChartLinkage() {
     const chartList = Object.values(CONFIG.charts).filter(Boolean);
 
-    // 注意：不再使用 echarts.connect 做缩放联动
-    // 原因：echarts.connect 对 bar 系列图表的 dataZoom 同步有 bug
-    // 改用手动监听 datazoom 事件，精确同步所有图表的 start/end
-
     chartList.forEach(src => {
         src.off('updateAxisPointer');
         src.off('globalout');
         src.off('datazoom');
 
-        // ── 悬浮竖线联动 ──
+        // 悬浮竖线联动
         src.on('updateAxisPointer', (evt) => {
             if (_syncing) return;
             let idx = evt.dataIndex;
@@ -114,11 +131,9 @@ function setupChartLinkage() {
             _syncing = false;
         });
 
-        // ── 缩放联动（手动同步，解决成交量 bar 图不跟随的问题）──
+        // 缩放联动（手动同步，修复 bar 图不跟随问题）
         src.on('datazoom', (evt) => {
             if (_syncing) return;
-
-            // 取当前图表 dataZoom 组件的 start/end
             let start, end;
             if (evt.batch && evt.batch.length > 0) {
                 start = evt.batch[0].start;
@@ -128,16 +143,10 @@ function setupChartLinkage() {
                 end   = evt.end;
             }
             if (start === undefined || end === undefined) return;
-
             _syncing = true;
             chartList.forEach(tgt => {
                 if (tgt === src) return;
-                tgt.dispatchAction({
-                    type:         'dataZoom',
-                    dataZoomIndex: 0,
-                    start,
-                    end
-                });
+                tgt.dispatchAction({ type: 'dataZoom', dataZoomIndex: 0, start, end });
             });
             _syncing = false;
         });
@@ -170,7 +179,6 @@ async function loadChartData(filename) {
         drawIVChart(chartData);
         drawCBChart(chartData);
 
-        // 每次绘图后重新绑定（setOption notMerge 会重置事件）
         setupChartLinkage();
 
         hideOverlay();
@@ -184,12 +192,13 @@ async function loadChartData(filename) {
 function filterByDate(rawData, startDate, endDate) {
     if (!startDate && !endDate) return rawData;
     return rawData.filter(row => {
-        let ds = row[''] || row['日期'] || row['date'];
-        if (!ds) return true;
-        ds = String(typeof ds === 'number' ? ds : ds).split(' ')[0].replace(/-/g, '');
-        const fmt = ds.length === 8
-            ? `${ds.substr(0, 4)}-${ds.substr(4, 2)}-${ds.substr(6, 2)}`
-            : ds;
+        const raw = row[''] || row['日期'] || row['date'];
+        if (!raw) return true;
+        const digits = String(raw).replace(/\s/g, '').replace(/[-\/]/g, '');
+        const full = digits.length === 6
+            ? '20' + digits          // yymmdd → yyyymmdd
+            : digits.substring(0, 8);
+        const fmt = `${full.substr(0,4)}-${full.substr(4,2)}-${full.substr(6,2)}`;
         if (startDate && fmt < startDate) return false;
         if (endDate   && fmt > endDate)   return false;
         return true;
@@ -201,10 +210,9 @@ function processChartData(rawData) {
     const homieNet = [], instNet = [], iv = [], ivPct = [], cb = [], ma20 = [];
 
     rawData.forEach(row => {
-        let ds = row[''] || row['日期'] || row['date'];
-        ds = String(typeof ds === 'number' ? ds : ds).split(' ')[0].replace(/-/g, '');
-        // ★ 严格截取后6位，保证 yymmdd 格式
-        dates.push(ds.length >= 6 ? ds.slice(-6) : ds);
+        const rawDate = row[''] || row['日期'] || row['date'];
+        // ★ 用统一的 toYYMMDD 转换，结果一定是 6 位字符串
+        dates.push(toYYMMDD(rawDate));
 
         const open  = parseFloat(row['开盘价'] || row['open'])  || 0;
         const close = parseFloat(row['收盘价'] || row['close']) || 0;
@@ -245,7 +253,8 @@ function makeXAxis(dates, showLabel) {
                 fontSize: 10,
                 color: '#666',
                 interval: Math.max(0, Math.floor(dates.length / 13) - 1),
-                formatter: v => String(v)   // 原样输出 yymmdd
+                // ★ 强制转 String，防止 ECharts 把纯数字标签格式化成年份
+                formatter: v => String(v)
             }
             : { show: false }
     };
@@ -261,7 +270,6 @@ function makeGrid(extraBottom) {
     };
 }
 
-// 所有图表统一用 inside zoom，无 slider bar
 function makeZoom() {
     return [{ type: 'inside', xAxisIndex: [0], start: 50, end: 100 }];
 }
@@ -282,14 +290,11 @@ function makeSubTooltip(formatter) {
 // ==================== 绘图函数 ====================
 
 function drawKlineChart(data) {
-    // ★ 把 dates 数组注入闭包，dataIndex 取值保证是完整 yymmdd
-    const dates = data.dates;
-
     CONFIG.charts.kline.setOption({
         title:  { text: '价格走势', left: 'center', textStyle: { fontSize: 16 } },
         legend: { data: ['K线', 'MA20'], top: 28 },
         grid:   makeGrid(),
-        xAxis:  makeXAxis(dates, true),
+        xAxis:  makeXAxis(data.dates, true),
         yAxis: {
             type: 'value', scale: true, splitArea: { show: true }, position: 'left',
             axisLabel: { fontSize: 11 }
@@ -309,9 +314,9 @@ function drawKlineChart(data) {
                 const m = params.find(p => p.seriesName === 'MA20');
                 if (!k) return '';
 
-                // ★ 用 dataIndex 从闭包 dates 里取，绝对是 yymmdd
-                const idx     = k.dataIndex;
-                const dateStr = (idx != null && dates[idx]) ? String(dates[idx]) : '';
+                // ★ 直接用 axisValue（category 轴的原始值），即 dates 数组中的字符串
+                //    一定是 toYYMMDD 转换后的 yymmdd 6位串
+                const dateStr = String(params[0].axisValue || k.name || '');
 
                 const [o, c, l, h] = k.value;
                 const clr    = c >= o ? COLORS.up : COLORS.down;
@@ -522,7 +527,6 @@ function drawCBChart(data) {
 }
 
 // ==================== 格式化工具 ====================
-
 function fmtPrice(v) {
     if (v == null || isNaN(v)) return '-';
     return Number(v).toFixed(2);
@@ -574,14 +578,14 @@ function updateStatsPanel(data) {
 
 function updateDateRange(data) {
     if (!data || data.length === 0) return;
-    const toDateStr = val => {
-        val = String(typeof val === 'number' ? val : val).replace(/-/g, '').split(' ')[0];
-        if (val.length === 8) return `${val.substr(0,4)}-${val.substr(4,2)}-${val.substr(6,2)}`;
-        return val;
+    const toFull = raw => {
+        const digits = String(raw).replace(/\s/g, '').replace(/[-\/]/g, '');
+        const d = digits.length === 6 ? '20' + digits : digits.substring(0, 8);
+        return `${d.substr(0,4)}-${d.substr(4,2)}-${d.substr(6,2)}`;
     };
     const getD  = r => r[''] || r['日期'] || r['date'];
-    const first = toDateStr(getD(data[0]));
-    const last  = toDateStr(getD(data[data.length - 1]));
+    const first = toFull(getD(data[0]));
+    const last  = toFull(getD(data[data.length - 1]));
     const si = document.getElementById('start-date');
     const ei = document.getElementById('end-date');
     si.min = first; si.max = last;
