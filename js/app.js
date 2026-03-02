@@ -126,7 +126,10 @@ async function loadChartData(filename) {
         
         if (rawData.length === 0) throw new Error('数据为空');
 
-        // 日期筛选逻辑 (略)
+        CONFIG.currentData = rawData;
+        CONFIG.currentContract = filename;
+
+        // 日期筛选逻辑
         const startDate = document.getElementById('start-date').value;
         const endDate = document.getElementById('end-date').value;
         let filteredData = rawData;
@@ -150,7 +153,13 @@ async function loadChartData(filename) {
         updateDateRange(rawData);
         const chartData = processChartData(filteredData);
 
-        // 按顺序绘制，确保数据同步
+        // 【关键修复】在绘制新数据前，清空所有图表实例
+        // 这能彻底清除旧的 dataZoom 状态、旧数据和缩放比例
+        Object.values(CONFIG.charts).forEach(chart => {
+            if (chart) chart.clear();
+        });
+
+        // 重新绘制
         drawKlineChart(chartData);
         drawVolumeChart(chartData);
         drawOIChart(chartData);
