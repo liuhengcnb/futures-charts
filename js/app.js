@@ -5,7 +5,6 @@ const CONFIG = {
     dataPath: 'data/',
     charts: {},
     currentDates: [],
-    // 固定像素网格：所有图表绘图区域左右边界完全对齐
     grid: { left: 85, right: 85, top: 50, bottom: 30 }
 };
 
@@ -19,7 +18,7 @@ const COLORS = {
 document.addEventListener('DOMContentLoaded', async () => {
     await initContractSelect();
     initEventListeners();
-    initCharts();                          // 先建实例、挂联动
+    initCharts();
     const select = document.getElementById('contract-select');
     if (select.options.length > 0) {
         select.selectedIndex = 0;
@@ -71,25 +70,25 @@ function initCharts() {
     window.addEventListener('resize', () => {
         Object.values(CONFIG.charts).forEach(c => c && c.resize());
     });
-    setupChartLinkage();
 }
 
-// ==================== 联动（悬浮竖线 + 缩放同步） ====================
+// ==================== 联动：每次绘图后重新绑定 ====================
 let _syncing = false;
 
 function setupChartLinkage() {
     const chartList = Object.values(CONFIG.charts).filter(Boolean);
 
-    // 1. 缩放联动（echarts.connect 令所有图表共享 dataZoom 状态）
+    // 缩放联动
     echarts.connect(chartList);
 
-    // 2. 悬浮联动：任意图 updateAxisPointer → 驱动其余图表显示同索引 tip
+    // 解绑旧事件，重新绑定（clear 后必须重新绑）
     chartList.forEach(src => {
         src.off('updateAxisPointer');
+        src.off('globalout');
+
         src.on('updateAxisPointer', (evt) => {
             if (_syncing) return;
 
-            // 优先取 dataIndex；若无则从 axesInfo 提取 x 轴坐标
             let idx = evt.dataIndex;
             if (typeof idx !== 'number') {
                 const xInfo = evt.axesInfo && evt.axesInfo.find(a => a.axisDim === 'x');
@@ -108,8 +107,6 @@ function setupChartLinkage() {
             _syncing = false;
         });
 
-        // 鼠标离开图表区域时，所有图隐藏 tip
-        src.off('globalout');
         src.on('globalout', () => {
             if (_syncing) return;
             _syncing = true;
@@ -129,7 +126,7 @@ async function loadChartData(filename) {
         const rawData = CSVParser.parse(text);
         if (!rawData || rawData.length === 0) throw new Error('数据为空');
 
-        CONFIG.rawData   = rawData;
+        CONFIG.rawData = rawData;
         CONFIG.currentFile = filename;
 
         updateDateRange(rawData);
@@ -140,16 +137,19 @@ async function loadChartData(filename) {
         const chartData = processChartData(filtered);
         CONFIG.currentDates = chartData.dates;
 
-        // ★ 清空所有图表（彻底清除旧数据/缩放状态）
-        Object.values(CONFIG.charts).forEach(c => c && c.clear());
+        // ★ 彻底清空所有图表（防止切换品种后旧数据残留）
+        Object.values(CONFIG.charts).forEach(c => { if (c) c.clear(); });
 
-        // ★ 重绘所有图表（品种切换必须六图全部刷新）
+        // ★ 六图全部重绘
         drawKlineChart(chartData);
         drawVolumeChart(chartData);
         drawOIChart(chartData);
         drawPositionChart(chartData);
         drawIVChart(chartData);
         drawCBChart(chartData);
+
+        // ★ 绘图完成后重新挂联动（clear 会销毁旧的事件监听）
+        setupChartLinkage();
 
         hideOverlay();
         updateStatsPanel(chartData);
@@ -179,10 +179,9 @@ function processChartData(rawData) {
     const homieNet = [], instNet = [], iv = [], ivPct = [], cb = [], ma20 = [];
 
     rawData.forEach(row => {
-        // --- 日期 → yymmdd (6位) ---
         let ds = row[''] || row['日期'] || row['date'];
         ds = String(typeof ds === 'number' ? ds : ds).split(' ')[0].replace(/-/g, '');
-        dates.push(ds.length === 8 ? ds.substring(2) : ds);   // 去掉世纪两位
+        dates.push(ds.length === 8 ? ds.substring(2) : ds);
 
         const open  = parseFloat(row['开盘价'] || row['open'])  || 0;
         const close = parseFloat(row['收盘价'] || row['close']) || 0;
@@ -205,9 +204,10 @@ function processChartData(rawData) {
 
         iv.push(parseFloat(row['IV']) || null);
         ivPct.push((parseFloat(row['IV_pct']) || 0) * 100);
-        cb.push(parseFloat(row['CB_index']) !== undefined && row['CB_index'] !== '' && row['CB_index'] !== null
-            ? parseFloat(row['CB_index'])
-            : null);
+
+        const cbVal = row['CB_index'];
+        cb.push(cbVal !== undefined && cbVal !== '' && cbVal !== null
+            ? parseFloat(cbVal) : null);
     });
 
     return { dates, ohlc, volumes, oi, oiChange, homieNet, instNet, iv, ivPct, cb, ma20 };
@@ -215,65 +215,49 @@ function processChartData(rawData) {
 
 // ==================== 通用配置生成器 ====================
 
-/**
- * 生成统一的 xAxis 配置
- * @param {string[]} dates   - yymmdd 格式日期数组
- * @param {boolean}  showLabel - 是否显示刻度标签（仅主图为 true）
- */
 function makeXAxis(dates, showLabel) {
     return {
         type: 'category',
         data: dates,
         boundaryGap: true,
-        axisTick: { alignWithLabel: true },
-        axisLine: { onZero: false },
-        axisPointer: { type: 'shadow' },
+        axisTick:  { alignWithLabel: true },
+        axisLine:  { onZero: false },
         axisLabel: showLabel
             ? {
                 show: true,
                 fontSize: 10,
                 color: '#666',
-                // 自动稀疏：约显示 12~15 个刻度
                 interval: Math.max(0, Math.floor(dates.length / 13) - 1),
-                formatter: v => v   // 已是 yymmdd 格式，直接用
+                formatter: v => v
             }
             : { show: false }
     };
 }
 
-/**
- * 生成统一的 grid 配置（含固定像素，保证绘图区对齐）
- * @param {number} [extraBottom=0] - 额外底部留白（主图为 50，给 slider）
- */
 function makeGrid(extraBottom) {
     return {
         left:         CONFIG.grid.left,
         right:        CONFIG.grid.right,
         top:          CONFIG.grid.top,
         bottom:       CONFIG.grid.bottom + (extraBottom || 0),
-        containLabel: false   // 不含轴标签，才能保证像素级对齐
+        containLabel: false
     };
 }
 
-/**
- * 生成统一的 tooltip 基础配置（含竖线 axisPointer）
- */
-function makeTooltip(formatter) {
+// 副图通用 tooltip（不含日期）
+function makeSubTooltip(formatter) {
     return {
-        trigger:     'axis',
-        confine:     true,
+        trigger:      'axis',
+        confine:      true,
         appendToBody: true,
         axisPointer: {
             type:      'line',
-            lineStyle: { color: 'rgba(80,80,80,0.5)', type: 'dashed', width: 1 }
+            lineStyle: { color: 'rgba(80,80,80,0.45)', type: 'dashed', width: 1 }
         },
         formatter
     };
 }
 
-/**
- * 各副图统一挂载 inside dataZoom（由主图 slider 通过 connect 同步）
- */
 function makeSubZoom() {
     return [{ type: 'inside', xAxisIndex: [0], start: 50, end: 100 }];
 }
@@ -284,8 +268,8 @@ function drawKlineChart(data) {
     CONFIG.charts.kline.setOption({
         title:  { text: '价格走势', left: 'center', textStyle: { fontSize: 16 } },
         legend: { data: ['K线', 'MA20'], top: 28 },
-        grid:   makeGrid(50),   // 额外 50px 给 slider
-        xAxis:  makeXAxis(data.dates, true),   // ★ 主图显示 yymmdd 横轴
+        grid:   makeGrid(50),
+        xAxis:  makeXAxis(data.dates, true),
         yAxis: {
             type: 'value', scale: true, splitArea: { show: true }, position: 'left',
             axisLabel: { fontSize: 11 }
@@ -294,22 +278,37 @@ function drawKlineChart(data) {
             { type: 'inside', xAxisIndex: [0], start: 50, end: 100 },
             { type: 'slider', xAxisIndex: [0], start: 50, end: 100, height: 20, bottom: 10, handleSize: 14 }
         ],
-        tooltip: makeTooltip((params) => {
-            const k = params.find(p => p.seriesName === 'K线');
-            const m = params.find(p => p.seriesName === 'MA20');
-            if (!k) return '';
-            const [o, c, l, h] = k.value;
-            const clr = c >= o ? COLORS.up : COLORS.down;
-            return `<div style="font-size:12px;line-height:2">
-                <b style="font-size:13px">${k.name}</b><br/>
-                <span style="color:${COLORS.up}">●</span> <b>K线</b><br/>
-                &nbsp;开&nbsp;<b>${fmtPrice(o)}</b>&ensp;收&nbsp;<b style="color:${clr}">${fmtPrice(c)}</b><br/>
-                &nbsp;低&nbsp;<b>${fmtPrice(l)}</b>&ensp;高&nbsp;<b>${fmtPrice(h)}</b>
-                ${m && m.value != null
-                    ? `<br/><span style="color:${COLORS.ma20}">●</span> MA20&nbsp;<b>${fmtPrice(m.value)}</b>`
-                    : ''}
-            </div>`;
-        }),
+        // ★ 主图 tooltip：日期 + 开/收/高/低 + MA20
+        tooltip: {
+            trigger:      'axis',
+            confine:      true,
+            appendToBody: true,
+            axisPointer: {
+                type:      'line',
+                lineStyle: { color: 'rgba(80,80,80,0.45)', type: 'dashed', width: 1 }
+            },
+            formatter(params) {
+                const k = params.find(p => p.seriesName === 'K线');
+                const m = params.find(p => p.seriesName === 'MA20');
+                if (!k) return '';
+                const [o, c, l, h] = k.value;
+                const clr = c >= o ? COLORS.up : COLORS.down;
+                const chg = o > 0 ? ((c - o) / o * 100) : 0;
+                const chgStr = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
+                return `<div style="font-size:12px;line-height:2;min-width:170px">
+                    <div style="font-weight:700;border-bottom:1px solid #eee;padding-bottom:4px;margin-bottom:4px">
+                        交易日期：${k.name}
+                    </div>
+                    <div>开盘价：<b>${fmtPrice(o)}</b></div>
+                    <div>收盘价：<b style="color:${clr}">${fmtPrice(c)}</b>&ensp;<span style="color:${clr};font-size:11px">${chgStr}</span></div>
+                    <div>最高价：<b style="color:${COLORS.up}">${fmtPrice(h)}</b></div>
+                    <div>最低价：<b style="color:${COLORS.down}">${fmtPrice(l)}</b></div>
+                    ${m && m.value != null
+                        ? `<div>MA20：<b style="color:${COLORS.ma20}">${fmtPrice(m.value)}</b></div>`
+                        : ''}
+                </div>`;
+            }
+        },
         series: [
             {
                 name: 'K线', type: 'candlestick', data: data.ohlc,
@@ -337,10 +336,10 @@ function drawVolumeChart(data) {
             axisLabel: { formatter: v => fmtNum(v), fontSize: 11 }
         },
         dataZoom: makeSubZoom(),
-        tooltip: makeTooltip((params) => {
+        tooltip: makeSubTooltip((params) => {
             const p = params[0];
             if (!p) return '';
-            return `<div style="font-size:12px;line-height:2">
+            return `<div style="font-size:12px;line-height:1.9">
                 <span style="color:${COLORS.volume}">●</span> 成交量&nbsp;<b>${fmtNum(p.value)}</b>
             </div>`;
         }),
@@ -368,10 +367,10 @@ function drawOIChart(data) {
             }
         ],
         dataZoom: makeSubZoom(),
-        tooltip: makeTooltip((params) => {
-            const oiP  = params.find(p => p.seriesName === '持仓量');
-            const chP  = params.find(p => p.seriesName === '持仓量变幅');
-            return `<div style="font-size:12px;line-height:2">
+        tooltip: makeSubTooltip((params) => {
+            const oiP = params.find(p => p.seriesName === '持仓量');
+            const chP = params.find(p => p.seriesName === '持仓量变幅');
+            return `<div style="font-size:12px;line-height:1.9">
                 ${oiP ? `<span style="color:${COLORS.oi}">●</span> 持仓量&nbsp;<b>${fmtNum(oiP.value)}</b><br/>` : ''}
                 ${chP ? `<span style="color:${COLORS.oiChange}">●</span> 持仓量变幅&nbsp;<b>${fmtPct1(chP.value)}</b>` : ''}
             </div>`;
@@ -385,7 +384,6 @@ function drawOIChart(data) {
                 name: '持仓量变幅', type: 'line', yAxisIndex: 1, data: data.oiChange,
                 lineStyle: { color: COLORS.oiChange, width: 2 },
                 symbol: 'circle', symbolSize: 3,
-                // ★ 红色虚线 0 轴
                 markLine: {
                     silent: true, symbol: 'none',
                     data: [{ yAxis: 0 }],
@@ -407,10 +405,10 @@ function drawPositionChart(data) {
             axisLabel: { formatter: v => fmtNum(v), fontSize: 11 }
         },
         dataZoom: makeSubZoom(),
-        tooltip: makeTooltip((params) => {
+        tooltip: makeSubTooltip((params) => {
             const h = params.find(p => p.seriesName === '家人净持仓');
             const i = params.find(p => p.seriesName === '机构净持仓');
-            return `<div style="font-size:12px;line-height:2">
+            return `<div style="font-size:12px;line-height:1.9">
                 ${h ? `<span style="color:${COLORS.homie}">●</span> 家人净持仓&nbsp;<b>${fmtNum(h.value)}</b><br/>` : ''}
                 ${i ? `<span style="color:${COLORS.inst}">●</span> 机构净持仓&nbsp;<b>${fmtNum(i.value)}</b>` : ''}
             </div>`;
@@ -419,7 +417,6 @@ function drawPositionChart(data) {
             {
                 name: '家人净持仓', type: 'line', data: data.homieNet,
                 lineStyle: { color: COLORS.homie, width: 2 }, symbol: 'circle', symbolSize: 3,
-                // ★ 黑色虚线 0 轴
                 markLine: {
                     silent: true, symbol: 'none',
                     data: [{ yAxis: 0 }],
@@ -443,7 +440,6 @@ function drawIVChart(data) {
         yAxis: [
             {
                 type: 'value', name: 'IV', position: 'left', splitArea: { show: true },
-                // ★ 左轴格式：0.0%
                 axisLabel: { formatter: v => v.toFixed(1) + '%', fontSize: 11 }
             },
             {
@@ -453,10 +449,10 @@ function drawIVChart(data) {
             }
         ],
         dataZoom: makeSubZoom(),
-        tooltip: makeTooltip((params) => {
+        tooltip: makeSubTooltip((params) => {
             const ivP    = params.find(p => p.seriesName === 'IV');
             const ivPctP = params.find(p => p.seriesName === 'IV60日分位数');
-            return `<div style="font-size:12px;line-height:2">
+            return `<div style="font-size:12px;line-height:1.9">
                 ${ivP    ? `<span style="color:${COLORS.iv}">●</span> IV&nbsp;<b>${fmtPct1(ivP.value)}</b><br/>` : ''}
                 ${ivPctP ? `<span style="color:${COLORS.ivPct}">●</span> IV分位数&nbsp;<b>${fmtPct1(ivPctP.value)}</b>` : ''}
             </div>`;
@@ -482,14 +478,13 @@ function drawCBChart(data) {
         xAxis: makeXAxis(data.dates, false),
         yAxis: {
             type: 'value', splitArea: { show: true },
-            // ★ 左轴格式：0.00
             axisLabel: { formatter: v => v.toFixed(2), fontSize: 11 }
         },
         dataZoom: makeSubZoom(),
-        tooltip: makeTooltip((params) => {
+        tooltip: makeSubTooltip((params) => {
             const p = params[0];
             if (!p) return '';
-            return `<div style="font-size:12px;line-height:2">
+            return `<div style="font-size:12px;line-height:1.9">
                 <span style="color:${COLORS.cb}">●</span> 期限结构分数&nbsp;<b>${fmtCB(p.value)}</b>
             </div>`;
         }),
@@ -507,25 +502,21 @@ function drawCBChart(data) {
 
 // ==================== 格式化工具 ====================
 
-/** 价格：保留两位小数 */
 function fmtPrice(v) {
     if (v == null || isNaN(v)) return '-';
     return Number(v).toFixed(2);
 }
 
-/** 百分比：x.x% */
 function fmtPct1(v) {
     if (v == null || isNaN(v)) return '-';
     return Number(v).toFixed(1) + '%';
 }
 
-/** 期限结构分数：x.xx */
 function fmtCB(v) {
     if (v == null || isNaN(v)) return '-';
     return Number(v).toFixed(2);
 }
 
-/** 大数字：万 / 亿 简写 */
 function fmtNum(num) {
     if (num === null || num === undefined || isNaN(num)) return '-';
     const abs = Math.abs(num);
@@ -534,7 +525,6 @@ function fmtNum(num) {
     return Math.round(num).toString();
 }
 
-/** 向后兼容别名 */
 function formatNumber(num) { return fmtNum(num); }
 
 // ==================== 统计面板 ====================
@@ -558,8 +548,8 @@ function updateStatsPanel(data) {
           className: (data.homieNet[lastIdx] || 0) >= 0 ? 'positive' : 'negative' },
         { label: '机构净持仓',  value: fmtNum(data.instNet[lastIdx]),
           className: (data.instNet[lastIdx] || 0) >= 0 ? 'positive' : 'negative' },
-        { label: 'IV',         value: fmtPct1(data.iv[lastIdx]) },
-        { label: '期限结构',   value: fmtCB(data.cb[lastIdx]),
+        { label: 'IV',          value: fmtPct1(data.iv[lastIdx]) },
+        { label: '期限结构',    value: fmtCB(data.cb[lastIdx]),
           className: (data.cb[lastIdx] || 0) >= 0 ? 'positive' : 'negative' }
     ];
 
@@ -574,19 +564,18 @@ function updateStatsPanel(data) {
 function updateDateRange(data) {
     if (!data || data.length === 0) return;
     const toDateStr = val => {
-        if (typeof val === 'number') val = val.toString();
-        val = String(val).replace(/-/g, '').split(' ')[0];
+        val = String(typeof val === 'number' ? val : val).replace(/-/g, '').split(' ')[0];
         if (val.length === 8)
             return `${val.substr(0,4)}-${val.substr(4,2)}-${val.substr(6,2)}`;
         return val;
     };
-    const getD = r => r[''] || r['日期'] || r['date'];
-    const firstStr = toDateStr(getD(data[0]));
-    const lastStr  = toDateStr(getD(data[data.length - 1]));
+    const getD  = r => r[''] || r['日期'] || r['date'];
+    const first = toDateStr(getD(data[0]));
+    const last  = toDateStr(getD(data[data.length - 1]));
     const si = document.getElementById('start-date');
     const ei = document.getElementById('end-date');
-    si.min = firstStr; si.max = lastStr;
-    ei.min = firstStr; ei.max = lastStr;
+    si.min = first; si.max = last;
+    ei.min = first; ei.max = last;
 }
 
 // ==================== 覆盖层辅助 ====================
