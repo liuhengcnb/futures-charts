@@ -78,17 +78,18 @@ let _syncing = false;
 function setupChartLinkage() {
     const chartList = Object.values(CONFIG.charts).filter(Boolean);
 
-    // 缩放联动：所有图表共享 dataZoom 状态（滚轮缩放同步）
-    echarts.connect(chartList);
+    // 注意：不再使用 echarts.connect 做缩放联动
+    // 原因：echarts.connect 对 bar 系列图表的 dataZoom 同步有 bug
+    // 改用手动监听 datazoom 事件，精确同步所有图表的 start/end
 
     chartList.forEach(src => {
         src.off('updateAxisPointer');
         src.off('globalout');
+        src.off('datazoom');
 
+        // ── 悬浮竖线联动 ──
         src.on('updateAxisPointer', (evt) => {
             if (_syncing) return;
-
-            // ★ 优先用 dataIndex，回退用 axesInfo 中的 x 轴坐标
             let idx = evt.dataIndex;
             if (typeof idx !== 'number') {
                 const xInfo = evt.axesInfo && evt.axesInfo.find(a => a.axisDim === 'x');
@@ -98,7 +99,6 @@ function setupChartLinkage() {
                 }
             }
             if (typeof idx !== 'number' || idx < 0) return;
-
             _syncing = true;
             chartList.forEach(tgt => {
                 if (tgt === src) return;
@@ -111,6 +111,34 @@ function setupChartLinkage() {
             if (_syncing) return;
             _syncing = true;
             chartList.forEach(tgt => tgt.dispatchAction({ type: 'hideTip' }));
+            _syncing = false;
+        });
+
+        // ── 缩放联动（手动同步，解决成交量 bar 图不跟随的问题）──
+        src.on('datazoom', (evt) => {
+            if (_syncing) return;
+
+            // 取当前图表 dataZoom 组件的 start/end
+            let start, end;
+            if (evt.batch && evt.batch.length > 0) {
+                start = evt.batch[0].start;
+                end   = evt.batch[0].end;
+            } else {
+                start = evt.start;
+                end   = evt.end;
+            }
+            if (start === undefined || end === undefined) return;
+
+            _syncing = true;
+            chartList.forEach(tgt => {
+                if (tgt === src) return;
+                tgt.dispatchAction({
+                    type:         'dataZoom',
+                    dataZoomIndex: 0,
+                    start,
+                    end
+                });
+            });
             _syncing = false;
         });
     });
@@ -127,7 +155,6 @@ async function loadChartData(filename) {
         if (!rawData || rawData.length === 0) throw new Error('数据为空');
 
         CONFIG.rawData = rawData;
-        CONFIG.currentFile = filename;
         updateDateRange(rawData);
 
         const startDate = document.getElementById('start-date').value;
@@ -136,8 +163,6 @@ async function loadChartData(filename) {
         const chartData = processChartData(filtered);
         CONFIG.currentDates = chartData.dates;
 
-        // ★ 不调用 clear()，直接用 notMerge:true 的 setOption 完整替换
-        // clear() 会破坏 echarts.connect 的分组，导致缩放联动失效
         drawKlineChart(chartData);
         drawVolumeChart(chartData);
         drawOIChart(chartData);
@@ -145,7 +170,7 @@ async function loadChartData(filename) {
         drawIVChart(chartData);
         drawCBChart(chartData);
 
-        // 绘图后重新绑定悬浮联动
+        // 每次绘图后重新绑定（setOption notMerge 会重置事件）
         setupChartLinkage();
 
         hideOverlay();
@@ -176,10 +201,10 @@ function processChartData(rawData) {
     const homieNet = [], instNet = [], iv = [], ivPct = [], cb = [], ma20 = [];
 
     rawData.forEach(row => {
-        // yymmdd 格式
         let ds = row[''] || row['日期'] || row['date'];
         ds = String(typeof ds === 'number' ? ds : ds).split(' ')[0].replace(/-/g, '');
-        dates.push(ds.length === 8 ? ds.substring(2) : ds);
+        // ★ 严格截取后6位，保证 yymmdd 格式
+        dates.push(ds.length >= 6 ? ds.slice(-6) : ds);
 
         const open  = parseFloat(row['开盘价'] || row['open'])  || 0;
         const close = parseFloat(row['收盘价'] || row['close']) || 0;
@@ -192,20 +217,14 @@ function processChartData(rawData) {
         oi.push(parseFloat(row['持仓量'] || row['oi']) || 0);
         oiChange.push((parseFloat(row['持仓量变幅']) || 0) * 100);
 
-        const homieLong  = parseFloat(row['家人多头持仓量']) || 0;
-        const homieShort = parseFloat(row['家人空头持仓量']) || 0;
-        homieNet.push(homieLong + homieShort);
-
-        const instLong  = parseFloat(row['机构多头持仓量']) || 0;
-        const instShort = parseFloat(row['机构空头持仓量']) || 0;
-        instNet.push(instLong + instShort);
+        homieNet.push((parseFloat(row['家人多头持仓量']) || 0) + (parseFloat(row['家人空头持仓量']) || 0));
+        instNet.push((parseFloat(row['机构多头持仓量']) || 0) + (parseFloat(row['机构空头持仓量']) || 0));
 
         iv.push(parseFloat(row['IV']) || null);
         ivPct.push((parseFloat(row['IV_pct']) || 0) * 100);
 
         const cbVal = row['CB_index'];
-        cb.push(cbVal !== undefined && cbVal !== '' && cbVal !== null
-            ? parseFloat(cbVal) : null);
+        cb.push(cbVal !== undefined && cbVal !== '' && cbVal !== null ? parseFloat(cbVal) : null);
     });
 
     return { dates, ohlc, volumes, oi, oiChange, homieNet, instNet, iv, ivPct, cb, ma20 };
@@ -226,7 +245,7 @@ function makeXAxis(dates, showLabel) {
                 fontSize: 10,
                 color: '#666',
                 interval: Math.max(0, Math.floor(dates.length / 13) - 1),
-                formatter: v => v   // dates 已是 yymmdd，直接用
+                formatter: v => String(v)   // 原样输出 yymmdd
             }
             : { show: false }
     };
@@ -242,12 +261,11 @@ function makeGrid(extraBottom) {
     };
 }
 
-// ★ 所有图表统一的缩放配置：只用 inside（滚轮），不显示底部 slider bar
+// 所有图表统一用 inside zoom，无 slider bar
 function makeZoom() {
     return [{ type: 'inside', xAxisIndex: [0], start: 50, end: 100 }];
 }
 
-// 副图 tooltip（不含日期）
 function makeSubTooltip(formatter) {
     return {
         trigger:      'axis',
@@ -264,18 +282,19 @@ function makeSubTooltip(formatter) {
 // ==================== 绘图函数 ====================
 
 function drawKlineChart(data) {
-    // ★ 在 formatter 闭包里直接引用 data.dates，不依赖 params.name
-    //    这样保证 tooltip 里的日期始终是完整的 yymmdd
+    // ★ 把 dates 数组注入闭包，dataIndex 取值保证是完整 yymmdd
+    const dates = data.dates;
+
     CONFIG.charts.kline.setOption({
         title:  { text: '价格走势', left: 'center', textStyle: { fontSize: 16 } },
         legend: { data: ['K线', 'MA20'], top: 28 },
-        grid:   makeGrid(),          // ★ 不再给 slider 留 extraBottom
-        xAxis:  makeXAxis(data.dates, true),
+        grid:   makeGrid(),
+        xAxis:  makeXAxis(dates, true),
         yAxis: {
             type: 'value', scale: true, splitArea: { show: true }, position: 'left',
             axisLabel: { fontSize: 11 }
         },
-        dataZoom: makeZoom(),        // ★ 只用 inside，无 slider bar
+        dataZoom: makeZoom(),
         tooltip: {
             trigger:      'axis',
             confine:      true,
@@ -285,29 +304,26 @@ function drawKlineChart(data) {
                 lineStyle: { color: 'rgba(80,80,80,0.45)', type: 'dashed', width: 1 }
             },
             formatter(params) {
-                // ★ 用 dataIndex 从 data.dates 取日期，保证是完整 yymmdd
-                const idx = params[0] && params[0].dataIndex;
-                const dateStr = (idx != null && data.dates[idx]) ? data.dates[idx] : (params[0] && params[0].name) || '';
-
+                if (!params || !params.length) return '';
                 const k = params.find(p => p.seriesName === 'K线');
                 const m = params.find(p => p.seriesName === 'MA20');
                 if (!k) return '';
+
+                // ★ 用 dataIndex 从闭包 dates 里取，绝对是 yymmdd
+                const idx     = k.dataIndex;
+                const dateStr = (idx != null && dates[idx]) ? String(dates[idx]) : '';
 
                 const [o, c, l, h] = k.value;
                 const clr    = c >= o ? COLORS.up : COLORS.down;
                 const chg    = o > 0 ? ((c - o) / o * 100) : 0;
                 const chgStr = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
 
-                return `<div style="font-size:12px;line-height:2;min-width:170px">
-                    <div style="font-weight:700;border-bottom:1px solid #eee;padding-bottom:3px;margin-bottom:3px">
-                        交易日期：${dateStr}
-                    </div>
-                    <div>开盘价：<b>${fmtPrice(o)}</b></div>
-                    <div>收盘价：<b style="color:${clr}">${fmtPrice(c)}</b>&ensp;<span style="color:${clr};font-size:11px">${chgStr}</span></div>
-                    <div>最高价：<b style="color:${COLORS.up}">${fmtPrice(h)}</b></div>
-                    <div>最低价：<b style="color:${COLORS.down}">${fmtPrice(l)}</b></div>
+                return `<div style="font-size:12px;line-height:2;min-width:160px">
+                    <div style="font-weight:700;border-bottom:1px solid #eee;padding-bottom:2px;margin-bottom:3px">${dateStr}</div>
+                    <div>开&ensp;<b>${fmtPrice(o)}</b>&ensp;收&ensp;<b style="color:${clr}">${fmtPrice(c)}</b>&ensp;<span style="color:${clr};font-size:11px">${chgStr}</span></div>
+                    <div>高&ensp;<b style="color:${COLORS.up}">${fmtPrice(h)}</b>&ensp;低&ensp;<b style="color:${COLORS.down}">${fmtPrice(l)}</b></div>
                     ${m && m.value != null
-                        ? `<div>MA20：<b style="color:${COLORS.ma20}">${fmtPrice(m.value)}</b></div>`
+                        ? `<div>MA20&ensp;<b style="color:${COLORS.ma20}">${fmtPrice(m.value)}</b></div>`
                         : ''}
                 </div>`;
             }
@@ -316,8 +332,8 @@ function drawKlineChart(data) {
             {
                 name: 'K线', type: 'candlestick', data: data.ohlc,
                 itemStyle: {
-                    color:        COLORS.up,   color0:        COLORS.down,
-                    borderColor:  COLORS.up,   borderColor0:  COLORS.down
+                    color: COLORS.up, color0: COLORS.down,
+                    borderColor: COLORS.up, borderColor0: COLORS.down
                 }
             },
             {
@@ -511,17 +527,14 @@ function fmtPrice(v) {
     if (v == null || isNaN(v)) return '-';
     return Number(v).toFixed(2);
 }
-
 function fmtPct1(v) {
     if (v == null || isNaN(v)) return '-';
     return Number(v).toFixed(1) + '%';
 }
-
 function fmtCB(v) {
     if (v == null || isNaN(v)) return '-';
     return Number(v).toFixed(2);
 }
-
 function fmtNum(num) {
     if (num === null || num === undefined || isNaN(num)) return '-';
     const abs = Math.abs(num);
@@ -529,7 +542,6 @@ function fmtNum(num) {
     if (abs >= 1e4) return (num / 1e4).toFixed(2) + '万';
     return Math.round(num).toString();
 }
-
 function formatNumber(num) { return fmtNum(num); }
 
 // ==================== 统计面板 ====================
@@ -542,20 +554,14 @@ function updateStatsPanel(data) {
     const changePct = prevClose > 0 ? (change / prevClose * 100) : 0;
 
     const stats = [
-        { label: '最新收盘价', value: fmtPrice(lastClose),
-          className: change >= 0 ? 'positive' : 'negative' },
-        { label: '涨跌幅',
-          value: (changePct >= 0 ? '+' : '') + fmtPct1(changePct),
-          className: changePct >= 0 ? 'positive' : 'negative' },
-        { label: '最新成交量',  value: fmtNum(data.volumes[lastIdx]) },
-        { label: '最新持仓量',  value: fmtNum(data.oi[lastIdx]) },
-        { label: '家人净持仓',  value: fmtNum(data.homieNet[lastIdx]),
-          className: (data.homieNet[lastIdx] || 0) >= 0 ? 'positive' : 'negative' },
-        { label: '机构净持仓',  value: fmtNum(data.instNet[lastIdx]),
-          className: (data.instNet[lastIdx] || 0) >= 0 ? 'positive' : 'negative' },
-        { label: 'IV',          value: fmtPct1(data.iv[lastIdx]) },
-        { label: '期限结构',    value: fmtCB(data.cb[lastIdx]),
-          className: (data.cb[lastIdx] || 0) >= 0 ? 'positive' : 'negative' }
+        { label: '最新收盘价', value: fmtPrice(lastClose),   className: change >= 0 ? 'positive' : 'negative' },
+        { label: '涨跌幅',     value: (changePct >= 0 ? '+' : '') + fmtPct1(changePct), className: changePct >= 0 ? 'positive' : 'negative' },
+        { label: '最新成交量', value: fmtNum(data.volumes[lastIdx]) },
+        { label: '最新持仓量', value: fmtNum(data.oi[lastIdx]) },
+        { label: '家人净持仓', value: fmtNum(data.homieNet[lastIdx]), className: (data.homieNet[lastIdx] || 0) >= 0 ? 'positive' : 'negative' },
+        { label: '机构净持仓', value: fmtNum(data.instNet[lastIdx]),  className: (data.instNet[lastIdx]  || 0) >= 0 ? 'positive' : 'negative' },
+        { label: 'IV',         value: fmtPct1(data.iv[lastIdx]) },
+        { label: '期限结构',   value: fmtCB(data.cb[lastIdx]),        className: (data.cb[lastIdx] || 0) >= 0 ? 'positive' : 'negative' }
     ];
 
     document.getElementById('stats-panel').innerHTML = stats.map(s => `
@@ -570,8 +576,7 @@ function updateDateRange(data) {
     if (!data || data.length === 0) return;
     const toDateStr = val => {
         val = String(typeof val === 'number' ? val : val).replace(/-/g, '').split(' ')[0];
-        if (val.length === 8)
-            return `${val.substr(0,4)}-${val.substr(4,2)}-${val.substr(6,2)}`;
+        if (val.length === 8) return `${val.substr(0,4)}-${val.substr(4,2)}-${val.substr(6,2)}`;
         return val;
     };
     const getD  = r => r[''] || r['日期'] || r['date'];
