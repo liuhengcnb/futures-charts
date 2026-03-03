@@ -4,35 +4,54 @@
 const CONFIG = {
     dataPath: 'data/',
     charts: {},
-    currentDates: [],
+    currentDates: [],   // 存储原始 "yyyy-mm-dd" 字符串，避免 ECharts 把纯数字当年份
     grid: { left: 85, right: 85, top: 50, bottom: 30 }
 };
 
 const COLORS = {
-    up: '#ef5350', down: '#26a69a', ma20: '#ffa726', volume: '#78909c',
-    oi: '#42a5f5', oiChange: '#ef5350', homie: '#ec407a', inst: '#ab47bc',
-    iv: '#42a5f5', ivPct: '#66bb6a', cb: '#8d6e63'
+    up:      '#ef5350',
+    down:    '#26a69a',
+    ma20:    '#FF6D00',   // 主图MA20：深橙色，醒目
+    volume:  '#78909c',
+    oi:      '#42a5f5',
+    oiChange:'#FF6D00',   // 持仓量变幅：深橙色
+    homie:   '#9C27B0',   // 家人净持仓：紫色
+    inst:    '#ef5350',   // 机构净持仓：红色
+    iv:      '#00BCD4',   // IV：青色
+    ivPct:   '#66bb6a',
+    cb:      '#8d6e63'
 };
 
 // ==================== 日期工具 ====================
 /**
- * 把任意格式的原始日期值转成 yymmdd 字符串（6位）
- * 支持：20250219 / 2025-02-19 / 250219 / 25-02-19 等
+ * 把 category 轴原始值（"yyyy-mm-dd" 格式）转成 "yymmdd" 显示字符串
+ * 例："2025-02-19" → "250219"
  */
-function toYYMMDD(raw) {
-    if (raw == null) return '';
-    // 去除空格、连字符、斜杠，只保留数字
-    const digits = String(raw).replace(/\s/g, '').replace(/[-\/]/g, '');
+function displayDate(raw) {
+    if (!raw) return '';
+    const s = String(raw).replace(/\s/g, '');
+    // 去掉连字符/斜杠得到纯数字串
+    const digits = s.replace(/[-\/]/g, '');
+    if (digits.length === 8) return digits.substring(2); // yyyymmdd → yymmdd
+    if (digits.length === 6) return digits;              // 已是 yymmdd
+    return s;
+}
+
+/**
+ * 把任意原始日期值规范化为 "yyyy-mm-dd" 字符串存入 dates 数组
+ * ECharts category 轴存带连字符的字符串，不会被当成数字解析
+ */
+function normalizeDate(raw) {
+    if (!raw) return '';
+    const s = String(raw).replace(/\s/g, '');
+    const digits = s.replace(/[-\/]/g, '');
     if (digits.length === 8) {
-        // yyyymmdd → yymmdd
-        return digits.substring(2, 8);   // 明确取第2~7位
+        return `${digits.substr(0,4)}-${digits.substr(4,2)}-${digits.substr(6,2)}`;
     }
     if (digits.length === 6) {
-        // 已是 yymmdd
-        return digits;
+        return `20${digits.substr(0,2)}-${digits.substr(2,2)}-${digits.substr(4,2)}`;
     }
-    // 其他情况：取最后6位兜底
-    return digits.length > 6 ? digits.slice(-6) : digits;
+    return s;
 }
 
 // ==================== 初始化 ====================
@@ -180,7 +199,6 @@ async function loadChartData(filename) {
         drawCBChart(chartData);
 
         setupChartLinkage();
-
         hideOverlay();
         updateStatsPanel(chartData);
     } catch (e) {
@@ -189,18 +207,23 @@ async function loadChartData(filename) {
     }
 }
 
+function getRawDate(row) {
+    // 兼容有 BOM 的空列名、'日期'、'date' 等
+    for (const key of Object.keys(row)) {
+        const k = key.replace(/^\uFEFF/, '').trim();
+        if (k === '' || k === '日期' || k === 'date') return row[key];
+    }
+    return null;
+}
+
 function filterByDate(rawData, startDate, endDate) {
     if (!startDate && !endDate) return rawData;
     return rawData.filter(row => {
-        const raw = row[''] || row['日期'] || row['date'];
+        const raw = getRawDate(row);
         if (!raw) return true;
-        const digits = String(raw).replace(/\s/g, '').replace(/[-\/]/g, '');
-        const full = digits.length === 6
-            ? '20' + digits          // yymmdd → yyyymmdd
-            : digits.substring(0, 8);
-        const fmt = `${full.substr(0,4)}-${full.substr(4,2)}-${full.substr(6,2)}`;
-        if (startDate && fmt < startDate) return false;
-        if (endDate   && fmt > endDate)   return false;
+        const norm = normalizeDate(raw);  // "yyyy-mm-dd"
+        if (startDate && norm < startDate) return false;
+        if (endDate   && norm > endDate)   return false;
         return true;
     });
 }
@@ -210,9 +233,9 @@ function processChartData(rawData) {
     const homieNet = [], instNet = [], iv = [], ivPct = [], cb = [], ma20 = [];
 
     rawData.forEach(row => {
-        const rawDate = row[''] || row['日期'] || row['date'];
-        // ★ 用统一的 toYYMMDD 转换，结果一定是 6 位字符串
-        dates.push(toYYMMDD(rawDate));
+        const rawDate = getRawDate(row);
+        // ★ 存 "yyyy-mm-dd" 格式：带连字符的字符串，ECharts 不会将其解析为数字
+        dates.push(normalizeDate(rawDate));
 
         const open  = parseFloat(row['开盘价'] || row['open'])  || 0;
         const close = parseFloat(row['收盘价'] || row['close']) || 0;
@@ -240,10 +263,14 @@ function processChartData(rawData) {
 
 // ==================== 通用配置生成器 ====================
 
+/**
+ * xAxis 配置
+ * dates 数组存 "yyyy-mm-dd"（带连字符），formatter 显示 "yymmdd"（6位无分隔符）
+ */
 function makeXAxis(dates, showLabel) {
     return {
         type: 'category',
-        data: dates,
+        data: dates,                    // ★ 存带连字符的字符串，防止被当数字
         boundaryGap: true,
         axisTick:  { alignWithLabel: true },
         axisLine:  { onZero: false },
@@ -253,8 +280,8 @@ function makeXAxis(dates, showLabel) {
                 fontSize: 10,
                 color: '#666',
                 interval: Math.max(0, Math.floor(dates.length / 13) - 1),
-                // ★ 强制转 String，防止 ECharts 把纯数字标签格式化成年份
-                formatter: v => String(v)
+                // ★ 在 formatter 里把 "yyyy-mm-dd" 转为 "yymmdd" 显示
+                formatter: v => displayDate(v)
             }
             : { show: false }
     };
@@ -274,7 +301,10 @@ function makeZoom() {
     return [{ type: 'inside', xAxisIndex: [0], start: 50, end: 100 }];
 }
 
-function makeSubTooltip(formatter) {
+/**
+ * 生成副图 tooltip，第一行统一显示 yymmdd 日期
+ */
+function makeSubTooltip(bodyFormatter) {
     return {
         trigger:      'axis',
         confine:      true,
@@ -283,7 +313,13 @@ function makeSubTooltip(formatter) {
             type:      'line',
             lineStyle: { color: 'rgba(80,80,80,0.45)', type: 'dashed', width: 1 }
         },
-        formatter
+        formatter(params) {
+            if (!params || !params.length) return '';
+            // ★ axisValue 是 "yyyy-mm-dd"，转为 "yymmdd" 显示
+            const dateStr = displayDate(params[0].axisValue);
+            const header  = `<div style="font-weight:700;border-bottom:1px solid #eee;padding-bottom:2px;margin-bottom:3px">${dateStr}</div>`;
+            return `<div style="font-size:12px;line-height:2;min-width:130px">${header}${bodyFormatter(params)}</div>`;
+        }
     };
 }
 
@@ -314,10 +350,8 @@ function drawKlineChart(data) {
                 const m = params.find(p => p.seriesName === 'MA20');
                 if (!k) return '';
 
-                // ★ 直接用 axisValue（category 轴的原始值），即 dates 数组中的字符串
-                //    一定是 toYYMMDD 转换后的 yymmdd 6位串
-                const dateStr = String(params[0].axisValue || k.name || '');
-
+                // ★ axisValue 是 "yyyy-mm-dd"，转为 "yymmdd" 显示
+                const dateStr = displayDate(params[0].axisValue);
                 const [o, c, l, h] = k.value;
                 const clr    = c >= o ? COLORS.up : COLORS.down;
                 const chg    = o > 0 ? ((c - o) / o * 100) : 0;
@@ -363,9 +397,7 @@ function drawVolumeChart(data) {
         tooltip:  makeSubTooltip((params) => {
             const p = params[0];
             if (!p) return '';
-            return `<div style="font-size:12px;line-height:1.9">
-                <span style="color:${COLORS.volume}">●</span>&nbsp;成交量&nbsp;<b>${fmtNum(p.value)}</b>
-            </div>`;
+            return `<span style="color:${COLORS.volume}">●</span>&nbsp;成交量&nbsp;<b>${fmtNum(p.value)}</b>`;
         }),
         series: [{
             name: '成交量', type: 'bar', data: data.volumes,
@@ -394,10 +426,10 @@ function drawOIChart(data) {
         tooltip: makeSubTooltip((params) => {
             const oiP = params.find(p => p.seriesName === '持仓量');
             const chP = params.find(p => p.seriesName === '持仓量变幅');
-            return `<div style="font-size:12px;line-height:1.9">
-                ${oiP ? `<span style="color:${COLORS.oi}">●</span>&nbsp;持仓量&nbsp;<b>${fmtNum(oiP.value)}</b><br/>` : ''}
-                ${chP ? `<span style="color:${COLORS.oiChange}">●</span>&nbsp;持仓量变幅&nbsp;<b>${fmtPct1(chP.value)}</b>` : ''}
-            </div>`;
+            return [
+                oiP ? `<span style="color:${COLORS.oi}">●</span>&nbsp;持仓量&nbsp;<b>${fmtNum(oiP.value)}</b>` : '',
+                chP ? `<span style="color:${COLORS.oiChange}">●</span>&nbsp;持仓量变幅&nbsp;<b>${fmtPct1(chP.value)}</b>` : ''
+            ].filter(Boolean).join('<br/>');
         }),
         series: [
             {
@@ -421,7 +453,13 @@ function drawOIChart(data) {
 function drawPositionChart(data) {
     CONFIG.charts.position.setOption({
         title:  { text: '家人 & 机构净持仓', left: 'center', textStyle: { fontSize: 14 } },
-        legend: { data: ['家人净持仓', '机构净持仓'], top: 25 },
+        legend: {
+            data: [
+                { name: '家人净持仓', itemStyle: { color: COLORS.homie } },
+                { name: '机构净持仓', itemStyle: { color: COLORS.inst  } }
+            ],
+            top: 25
+        },
         grid:   makeGrid(),
         xAxis:  makeXAxis(data.dates, false),
         yAxis: {
@@ -432,15 +470,17 @@ function drawPositionChart(data) {
         tooltip: makeSubTooltip((params) => {
             const h = params.find(p => p.seriesName === '家人净持仓');
             const i = params.find(p => p.seriesName === '机构净持仓');
-            return `<div style="font-size:12px;line-height:1.9">
-                ${h ? `<span style="color:${COLORS.homie}">●</span>&nbsp;家人净持仓&nbsp;<b>${fmtNum(h.value)}</b><br/>` : ''}
-                ${i ? `<span style="color:${COLORS.inst}">●</span>&nbsp;机构净持仓&nbsp;<b>${fmtNum(i.value)}</b>` : ''}
-            </div>`;
+            return [
+                h ? `<span style="color:${COLORS.homie}">●</span>&nbsp;家人净持仓&nbsp;<b>${fmtNum(h.value)}</b>` : '',
+                i ? `<span style="color:${COLORS.inst}">●</span>&nbsp;机构净持仓&nbsp;<b>${fmtNum(i.value)}</b>` : ''
+            ].filter(Boolean).join('<br/>');
         }),
         series: [
             {
                 name: '家人净持仓', type: 'line', data: data.homieNet,
-                lineStyle: { color: COLORS.homie, width: 2 }, symbol: 'circle', symbolSize: 3,
+                lineStyle: { color: COLORS.homie, width: 2 },
+                itemStyle: { color: COLORS.homie },
+                symbol: 'circle', symbolSize: 3,
                 markLine: {
                     silent: true, symbol: 'none',
                     data: [{ yAxis: 0 }],
@@ -449,7 +489,9 @@ function drawPositionChart(data) {
             },
             {
                 name: '机构净持仓', type: 'line', data: data.instNet,
-                lineStyle: { color: COLORS.inst, width: 2 }, symbol: 'circle', symbolSize: 3
+                lineStyle: { color: COLORS.inst, width: 2 },
+                itemStyle: { color: COLORS.inst },
+                symbol: 'circle', symbolSize: 3
             }
         ]
     }, { notMerge: true });
@@ -476,20 +518,22 @@ function drawIVChart(data) {
         tooltip: makeSubTooltip((params) => {
             const ivP    = params.find(p => p.seriesName === 'IV');
             const ivPctP = params.find(p => p.seriesName === 'IV60日分位数');
-            return `<div style="font-size:12px;line-height:1.9">
-                ${ivP    ? `<span style="color:${COLORS.iv}">●</span>&nbsp;IV&nbsp;<b>${fmtPct1(ivP.value)}</b><br/>` : ''}
-                ${ivPctP ? `<span style="color:${COLORS.ivPct}">●</span>&nbsp;IV分位数&nbsp;<b>${fmtPct1(ivPctP.value)}</b>` : ''}
-            </div>`;
+            return [
+                ivP    ? `<span style="color:${COLORS.iv}">●</span>&nbsp;IV&nbsp;<b>${fmtPct1(ivP.value)}</b>` : '',
+                ivPctP ? `<span style="color:${COLORS.ivPct}">●</span>&nbsp;IV分位数&nbsp;<b>${fmtPct1(ivPctP.value)}</b>` : ''
+            ].filter(Boolean).join('<br/>');
         }),
         series: [
             {
                 name: 'IV', type: 'line', data: data.iv,
-                lineStyle: { color: COLORS.iv, width: 2 }, symbol: 'circle', symbolSize: 3,
-                connectNulls: true
+                lineStyle: { color: COLORS.iv, width: 2 },
+                itemStyle: { color: COLORS.iv },
+                symbol: 'circle', symbolSize: 3, connectNulls: true
             },
             {
                 name: 'IV60日分位数', type: 'line', yAxisIndex: 1, data: data.ivPct,
                 lineStyle: { color: COLORS.ivPct, width: 2, type: 'dashed' },
+                itemStyle: { color: COLORS.ivPct },
                 symbol: 'circle', symbolSize: 3
             }
         ]
@@ -509,14 +553,13 @@ function drawCBChart(data) {
         tooltip:  makeSubTooltip((params) => {
             const p = params[0];
             if (!p) return '';
-            return `<div style="font-size:12px;line-height:1.9">
-                <span style="color:${COLORS.cb}">●</span>&nbsp;期限结构分数&nbsp;<b>${fmtCB(p.value)}</b>
-            </div>`;
+            return `<span style="color:${COLORS.cb}">●</span>&nbsp;期限结构分数&nbsp;<b>${fmtCB(p.value)}</b>`;
         }),
         series: [{
             name: '期限结构', type: 'line', data: data.cb,
-            lineStyle: { color: COLORS.cb, width: 2 }, symbol: 'circle', symbolSize: 3,
-            connectNulls: true,
+            lineStyle: { color: COLORS.cb, width: 2 },
+            itemStyle: { color: COLORS.cb },
+            symbol: 'circle', symbolSize: 3, connectNulls: true,
             markLine: {
                 silent: true, symbol: 'none',
                 data: [{ yAxis: 0 }],
@@ -578,14 +621,9 @@ function updateStatsPanel(data) {
 
 function updateDateRange(data) {
     if (!data || data.length === 0) return;
-    const toFull = raw => {
-        const digits = String(raw).replace(/\s/g, '').replace(/[-\/]/g, '');
-        const d = digits.length === 6 ? '20' + digits : digits.substring(0, 8);
-        return `${d.substr(0,4)}-${d.substr(4,2)}-${d.substr(6,2)}`;
-    };
-    const getD  = r => r[''] || r['日期'] || r['date'];
-    const first = toFull(getD(data[0]));
-    const last  = toFull(getD(data[data.length - 1]));
+    const getD  = r => getRawDate(r);
+    const first = normalizeDate(getD(data[0]));
+    const last  = normalizeDate(getD(data[data.length - 1]));
     const si = document.getElementById('start-date');
     const ei = document.getElementById('end-date');
     si.min = first; si.max = last;
