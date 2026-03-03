@@ -366,10 +366,10 @@ function drawKlineChart(data) {
 
                 // ★ 关键修正：ECharts K线图在类目轴下，value[0] 是索引或日期字符串
                 // 真正的价格数据 [open, close, low, high] 从索引 1 开始
-                const open  = k.value[2];  // 开盘
-                const close = k.value[1];  // 收盘
-                const low   = k.value[4];  // 最低
-                const high  = k.value[3];  // 最高
+                const open  = k.value[1];  // 开盘
+                const close = k.value[2];  // 收盘
+                const low   = k.value[3];  // 最低
+                const high  = k.value[4];  // 最高
 
                 const maVal = (m && m.value !== undefined) 
                     ? (Array.isArray(m.value) ? m.value[1] : m.value) 
