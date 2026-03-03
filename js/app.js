@@ -46,8 +46,12 @@ function toCatDate(raw) {
 /**
  * 把 category 轴的值（"yy-mm-dd" 或 "yymmdd"）转成 6 位显示字符串 "yymmdd"
  */
+// 修改 app.js 约第 53 行
 function toDisplay(catVal) {
-    return String(catVal || '').replace(/-/g, '');  // "25-02-19" → "250219"
+    // 移除所有连字符和斜杠
+    let s = String(catVal || '').replace(/[-\/]/g, '').trim();
+    // 强制截取最后 6 位，确保 20250219 变成 250219
+    return s.length >= 6 ? s.slice(-6) : s;
 }
 
 /**
@@ -350,33 +354,44 @@ function drawKlineChart(data) {
                 type:      'line',
                 lineStyle: { color: 'rgba(80,80,80,0.45)', type: 'dashed', width: 1 }
             },
+// 修改 app.js 约第 161 行开始的 formatter 部分
             formatter(params) {
                 if (!params || !params.length) return '';
                 const k = params.find(p => p.seriesName === 'K线');
                 const m = params.find(p => p.seriesName === 'MA20');
                 if (!k || !Array.isArray(k.value)) return '';
 
-                // ★ axisValue 是 "yy-mm-dd"，去掉连字符显示 "yymmdd"
+                // 第一行显示 yymmdd 格式日期
                 const dateStr = toDisplay(params[0].axisValue);
 
-                // ★ ECharts candlestick value: [open, close, lowest, highest]
-                const open  = k.value[0];  // 开盘价
-                const close = k.value[1];  // 收盘价
-                const low   = k.value[2];  // 最低价
-                const high  = k.value[3];  // 最高价
+                // ★ 关键修正：ECharts K线图在类目轴下，value[0] 是索引或日期字符串
+                // 真正的价格数据 [open, close, low, high] 从索引 1 开始
+                const open  = k.value[2];  // 开盘
+                const close = k.value[1];  // 收盘
+                const low   = k.value[4];  // 最低
+                const high  = k.value[3];  // 最高
 
-                const clr    = close >= open ? COLORS.up : COLORS.down;
-                const chg    = open > 0 ? ((close - open) / open * 100) : 0;
-                const chgStr = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
+                const maVal = (m && m.value !== undefined) 
+                    ? (Array.isArray(m.value) ? m.value[1] : m.value) 
+                    : '-';
 
-                return `<div style="font-size:12px;line-height:2;min-width:170px">
-                    <div style="font-weight:700;border-bottom:1px solid #eee;padding-bottom:2px;margin-bottom:3px">${dateStr}</div>
-                    <div>开&ensp;<b>${fmtPrice(open)}</b>&ensp;收&ensp;<b style="color:${clr}">${fmtPrice(close)}</b>&ensp;<span style="color:${clr};font-size:11px">${chgStr}</span></div>
-                    <div>高&ensp;<b style="color:${COLORS.up}">${fmtPrice(high)}</b>&ensp;低&ensp;<b style="color:${COLORS.down}">${fmtPrice(low)}</b></div>
-                    ${m && m.value != null
-                        ? `<div>MA20&ensp;<b style="color:${COLORS.ma20}">${fmtPrice(m.value)}</b></div>`
-                        : ''}
-                </div>`;
+                // 颜色逻辑保持不变
+                const color = close >= open ? COLORS.up : COLORS.down;
+                const fmt = val => (val && !isNaN(val)) ? parseFloat(val).toFixed(2) : '-';
+
+                return `
+                    <div style="font-weight:bold; margin-bottom:4px; border-bottom:1px solid #eee; padding-bottom:2px;">
+                        ${dateStr}
+                    </div>
+                    <div style="display:grid; grid-template-columns: auto auto; gap: 5px 15px; font-size:12px;">
+                        <span>开盘:</span><span style="text-align:right; font-family:monospace;">${fmt(open)}</span>
+                        <span>最高:</span><span style="text-align:right; font-family:monospace;">${fmt(high)}</span>
+                        <span>最低:</span><span style="text-align:right; font-family:monospace;">${fmt(low)}</span>
+                        <span>收盘:</span><span style="text-align:right; font-weight:bold; color:${color}; font-family:monospace;">${fmt(close)}</span>
+                        <span style="color:${COLORS.ma20}">MA20:</span>
+                        <span style="text-align:right; color:${COLORS.ma20}; font-family:monospace;">${fmt(maVal)}</span>
+                    </div>
+                `;
             }
         },
         series: [
