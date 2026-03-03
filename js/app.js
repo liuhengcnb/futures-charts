@@ -354,40 +354,54 @@ function drawKlineChart(data) {
                 type:      'line',
                 lineStyle: { color: 'rgba(80,80,80,0.45)', type: 'dashed', width: 1 }
             },
-// 修改 app.js 约第 161 行开始的 formatter 部分
             formatter(params) {
                 if (!params || !params.length) return '';
                 const k = params.find(p => p.seriesName === 'K线');
                 const m = params.find(p => p.seriesName === 'MA20');
                 if (!k || !Array.isArray(k.value)) return '';
 
-                // 第一行显示 yymmdd 格式日期
                 const dateStr = toDisplay(params[0].axisValue);
 
-                // ★ 关键修正：ECharts K线图在类目轴下，value[0] 是索引或日期字符串
-                // 真正的价格数据 [open, close, low, high] 从索引 1 开始
-                const open  = k.value[1];  // 开盘
-                const close = k.value[2];  // 收盘
-                const low   = k.value[3];  // 最低
-                const high  = k.value[4];  // 最高
+                // 价格数据 [index, open, close, low, high]
+                const open  = k.value[1];
+                const close = k.value[2];
+                const low   = k.value[3];
+                const high  = k.value[4];
+
+                // --- 新增：涨跌幅计算逻辑 ---
+                const dataIdx = k.dataIndex; // 当前点在原始数据中的索引
+                let changePctStr = '0.00%';
+                let changeColor = '#212529'; // 默认黑色/中性
+
+                if (dataIdx > 0) {
+                    const prevClose = data.ohlc[dataIdx - 1][1]; // 获取昨日收盘价
+                    if (prevClose !== 0) {
+                        const pct = ((close / prevClose) - 1) * 100;
+                        changePctStr = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+                        changeColor = pct >= 0 ? COLORS.up : COLORS.down;
+                    }
+                }
 
                 const maVal = (m && m.value !== undefined) 
                     ? (Array.isArray(m.value) ? m.value[1] : m.value) 
                     : '-';
 
-                // 颜色逻辑保持不变
-                const color = close >= open ? COLORS.up : COLORS.down;
                 const fmt = val => (val && !isNaN(val)) ? parseFloat(val).toFixed(2) : '-';
+                
+                // 价格数值样式：黑色加粗
+                const priceStyle = `text-align:right; font-family:monospace; color:#000; font-weight:bold;`;
 
                 return `
                     <div style="font-weight:bold; margin-bottom:4px; border-bottom:1px solid #eee; padding-bottom:2px;">
                         ${dateStr}
                     </div>
                     <div style="display:grid; grid-template-columns: auto auto; gap: 5px 15px; font-size:12px;">
-                        <span>开盘:</span><span style="text-align:right; font-family:monospace;">${fmt(open)}</span>
-                        <span>最高:</span><span style="text-align:right; font-family:monospace;">${fmt(high)}</span>
-                        <span>最低:</span><span style="text-align:right; font-family:monospace;">${fmt(low)}</span>
-                        <span>收盘:</span><span style="text-align:right; font-weight:bold; color:${color}; font-family:monospace;">${fmt(close)}</span>
+                        <span>开盘:</span><span style="${priceStyle}">${fmt(open)}</span>
+                        <span>最高:</span><span style="${priceStyle}">${fmt(high)}</span>
+                        <span>最低:</span><span style="${priceStyle}">${fmt(low)}</span>
+                        <span>收盘:</span><span style="${priceStyle}">${fmt(close)}</span>
+                        <span>涨跌幅:</span><span style="text-align:right; font-family:monospace; color:${changeColor}; font-weight:bold;">${changePctStr}</span>
+                        <hr style="grid-column: span 2; border:none; border-top:1px solid #eee; margin:2px 0;">
                         <span style="color:${COLORS.ma20}">MA20:</span>
                         <span style="text-align:right; color:${COLORS.ma20}; font-family:monospace;">${fmt(maVal)}</span>
                     </div>
