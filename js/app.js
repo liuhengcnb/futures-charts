@@ -4,54 +4,60 @@
 const CONFIG = {
     dataPath: 'data/',
     charts: {},
-    currentDates: [],   // 存储原始 "yyyy-mm-dd" 字符串，避免 ECharts 把纯数字当年份
+    currentDates: [],   // 存 "yy-mm-dd" 格式（两位年份+连字符），防止 ECharts 误识别为 ISO 日期
     grid: { left: 85, right: 85, top: 50, bottom: 30 }
 };
 
+// 颜色配置（中国市场惯例：红涨绿跌）
 const COLORS = {
-    up:      '#ef5350',
-    down:    '#26a69a',
-    ma20:    '#FF6D00',   // 主图MA20：深橙色，醒目
-    volume:  '#78909c',
-    oi:      '#42a5f5',
-    oiChange:'#FF6D00',   // 持仓量变幅：深橙色
-    homie:   '#9C27B0',   // 家人净持仓：紫色
-    inst:    '#ef5350',   // 机构净持仓：红色
-    iv:      '#00BCD4',   // IV：青色
-    ivPct:   '#66bb6a',
-    cb:      '#8d6e63'
+    up:       '#ef5350',  // 涨 - 红
+    down:     '#26a69a',  // 跌 - 绿
+    ma20:     '#FF6D00',  // MA20 - 深橙
+    volume:   '#78909c',  // 成交量 - 蓝灰
+    oi:       '#42a5f5',  // 持仓量 - 蓝
+    oiChange: '#FF6D00',  // 持仓量变幅 - 深橙
+    homie:    '#9C27B0',  // 家人净持仓 - 紫
+    inst:     '#ef5350',  // 机构净持仓 - 红
+    iv:       '#00BCD4',  // IV - 青
+    ivPct:    '#66bb6a',  // IV分位数 - 绿
+    cb:       '#8d6e63'   // 期限结构 - 棕
 };
 
 // ==================== 日期工具 ====================
+
 /**
- * 把 category 轴原始值（"yyyy-mm-dd" 格式）转成 "yymmdd" 显示字符串
- * 例："2025-02-19" → "250219"
+ * 把原始日期字符串（"2025-02-19" / "20250219"）转成 8 位纯数字 "20250219"
  */
-function displayDate(raw) {
+function toDigits8(raw) {
     if (!raw) return '';
-    const s = String(raw).replace(/\s/g, '');
-    // 去掉连字符/斜杠得到纯数字串
-    const digits = s.replace(/[-\/]/g, '');
-    if (digits.length === 8) return digits.substring(2); // yyyymmdd → yymmdd
-    if (digits.length === 6) return digits;              // 已是 yymmdd
-    return s;
+    return String(raw).replace(/\s/g, '').replace(/[-\/]/g, '');
 }
 
 /**
- * 把任意原始日期值规范化为 "yyyy-mm-dd" 字符串存入 dates 数组
- * ECharts category 轴存带连字符的字符串，不会被当成数字解析
+ * 存入 ECharts category 轴的格式："yy-mm-dd"（例："25-02-19"）
+ * ★ 两位年份 + 连字符，ECharts 无法将其识别为 ISO 日期，不会自动切换时间轴渲染
  */
-function normalizeDate(raw) {
-    if (!raw) return '';
-    const s = String(raw).replace(/\s/g, '');
-    const digits = s.replace(/[-\/]/g, '');
-    if (digits.length === 8) {
-        return `${digits.substr(0,4)}-${digits.substr(4,2)}-${digits.substr(6,2)}`;
-    }
-    if (digits.length === 6) {
-        return `20${digits.substr(0,2)}-${digits.substr(2,2)}-${digits.substr(4,2)}`;
-    }
-    return s;
+function toCatDate(raw) {
+    const d = toDigits8(raw);
+    if (d.length < 8) return d;
+    return `${d.substr(2,2)}-${d.substr(4,2)}-${d.substr(6,2)}`;  // "25-02-19"
+}
+
+/**
+ * 把 category 轴的值（"yy-mm-dd" 或 "yymmdd"）转成 6 位显示字符串 "yymmdd"
+ */
+function toDisplay(catVal) {
+    return String(catVal || '').replace(/-/g, '');  // "25-02-19" → "250219"
+}
+
+/**
+ * 把任意原始日期值规范化为 "yyyy-mm-dd"，用于日期范围过滤
+ */
+function toFullDate(raw) {
+    const d = toDigits8(raw);
+    if (d.length === 8)
+        return `${d.substr(0,4)}-${d.substr(4,2)}-${d.substr(6,2)}`;
+    return d;
 }
 
 // ==================== 初始化 ====================
@@ -155,11 +161,9 @@ function setupChartLinkage() {
             if (_syncing) return;
             let start, end;
             if (evt.batch && evt.batch.length > 0) {
-                start = evt.batch[0].start;
-                end   = evt.batch[0].end;
+                start = evt.batch[0].start; end = evt.batch[0].end;
             } else {
-                start = evt.start;
-                end   = evt.end;
+                start = evt.start; end = evt.end;
             }
             if (start === undefined || end === undefined) return;
             _syncing = true;
@@ -173,6 +177,18 @@ function setupChartLinkage() {
 }
 
 // ==================== 数据加载 ====================
+
+/**
+ * 从 row 对象中提取日期值，兼容 BOM 空列名
+ */
+function getRawDate(row) {
+    for (const key of Object.keys(row)) {
+        const k = key.replace(/^\uFEFF/, '').trim();
+        if (k === '' || k === '日期' || k === 'date') return row[key];
+    }
+    return null;
+}
+
 async function loadChartData(filename) {
     showLoading();
     try {
@@ -207,23 +223,14 @@ async function loadChartData(filename) {
     }
 }
 
-function getRawDate(row) {
-    // 兼容有 BOM 的空列名、'日期'、'date' 等
-    for (const key of Object.keys(row)) {
-        const k = key.replace(/^\uFEFF/, '').trim();
-        if (k === '' || k === '日期' || k === 'date') return row[key];
-    }
-    return null;
-}
-
 function filterByDate(rawData, startDate, endDate) {
     if (!startDate && !endDate) return rawData;
     return rawData.filter(row => {
         const raw = getRawDate(row);
         if (!raw) return true;
-        const norm = normalizeDate(raw);  // "yyyy-mm-dd"
-        if (startDate && norm < startDate) return false;
-        if (endDate   && norm > endDate)   return false;
+        const full = toFullDate(raw);  // "yyyy-mm-dd" 用于和 input[type=date] 比较
+        if (startDate && full < startDate) return false;
+        if (endDate   && full > endDate)   return false;
         return true;
     });
 }
@@ -233,10 +240,11 @@ function processChartData(rawData) {
     const homieNet = [], instNet = [], iv = [], ivPct = [], cb = [], ma20 = [];
 
     rawData.forEach(row => {
-        const rawDate = getRawDate(row);
-        // ★ 存 "yyyy-mm-dd" 格式：带连字符的字符串，ECharts 不会将其解析为数字
-        dates.push(normalizeDate(rawDate));
+        // ★ 存 "yy-mm-dd" 格式（如 "25-02-19"）
+        //    两位年份使 ECharts 无法识别为 ISO 日期，彻底避免自动时间轴
+        dates.push(toCatDate(getRawDate(row)));
 
+        // ★ ECharts candlestick 数据格式：[open, close, lowest, highest]
         const open  = parseFloat(row['开盘价'] || row['open'])  || 0;
         const close = parseFloat(row['收盘价'] || row['close']) || 0;
         const low   = parseFloat(row['最低价'] || row['low'])   || 0;
@@ -255,7 +263,7 @@ function processChartData(rawData) {
         ivPct.push((parseFloat(row['IV_pct']) || 0) * 100);
 
         const cbVal = row['CB_index'];
-        cb.push(cbVal !== undefined && cbVal !== '' && cbVal !== null ? parseFloat(cbVal) : null);
+        cb.push(cbVal != null && cbVal !== '' ? parseFloat(cbVal) : null);
     });
 
     return { dates, ohlc, volumes, oi, oiChange, homieNet, instNet, iv, ivPct, cb, ma20 };
@@ -263,14 +271,10 @@ function processChartData(rawData) {
 
 // ==================== 通用配置生成器 ====================
 
-/**
- * xAxis 配置
- * dates 数组存 "yyyy-mm-dd"（带连字符），formatter 显示 "yymmdd"（6位无分隔符）
- */
 function makeXAxis(dates, showLabel) {
     return {
         type: 'category',
-        data: dates,                    // ★ 存带连字符的字符串，防止被当数字
+        data: dates,          // "yy-mm-dd" 格式数组，ECharts 不会误识别为日期
         boundaryGap: true,
         axisTick:  { alignWithLabel: true },
         axisLine:  { onZero: false },
@@ -280,8 +284,8 @@ function makeXAxis(dates, showLabel) {
                 fontSize: 10,
                 color: '#666',
                 interval: Math.max(0, Math.floor(dates.length / 13) - 1),
-                // ★ 在 formatter 里把 "yyyy-mm-dd" 转为 "yymmdd" 显示
-                formatter: v => displayDate(v)
+                // ★ 去掉连字符 "25-02-19" → 显示 "250219"
+                formatter: v => toDisplay(v)
             }
             : { show: false }
     };
@@ -302,7 +306,8 @@ function makeZoom() {
 }
 
 /**
- * 生成副图 tooltip，第一行统一显示 yymmdd 日期
+ * 副图统一 tooltip，第一行显示 yymmdd 日期
+ * bodyFormatter(params) 返回 body 部分的 HTML 字符串
  */
 function makeSubTooltip(bodyFormatter) {
     return {
@@ -315,10 +320,11 @@ function makeSubTooltip(bodyFormatter) {
         },
         formatter(params) {
             if (!params || !params.length) return '';
-            // ★ axisValue 是 "yyyy-mm-dd"，转为 "yymmdd" 显示
-            const dateStr = displayDate(params[0].axisValue);
+            // axisValue 是 "yy-mm-dd"，去掉连字符显示 "yymmdd"
+            const dateStr = toDisplay(params[0].axisValue);
             const header  = `<div style="font-weight:700;border-bottom:1px solid #eee;padding-bottom:2px;margin-bottom:3px">${dateStr}</div>`;
-            return `<div style="font-size:12px;line-height:2;min-width:130px">${header}${bodyFormatter(params)}</div>`;
+            const body    = bodyFormatter(params);
+            return `<div style="font-size:12px;line-height:2;min-width:130px">${header}${body}</div>`;
         }
     };
 }
@@ -348,19 +354,25 @@ function drawKlineChart(data) {
                 if (!params || !params.length) return '';
                 const k = params.find(p => p.seriesName === 'K线');
                 const m = params.find(p => p.seriesName === 'MA20');
-                if (!k) return '';
+                if (!k || !Array.isArray(k.value)) return '';
 
-                // ★ axisValue 是 "yyyy-mm-dd"，转为 "yymmdd" 显示
-                const dateStr = displayDate(params[0].axisValue);
-                const [o, c, l, h] = k.value;
-                const clr    = c >= o ? COLORS.up : COLORS.down;
-                const chg    = o > 0 ? ((c - o) / o * 100) : 0;
+                // ★ axisValue 是 "yy-mm-dd"，去掉连字符显示 "yymmdd"
+                const dateStr = toDisplay(params[0].axisValue);
+
+                // ★ ECharts candlestick value: [open, close, lowest, highest]
+                const open  = k.value[0];  // 开盘价
+                const close = k.value[1];  // 收盘价
+                const low   = k.value[2];  // 最低价
+                const high  = k.value[3];  // 最高价
+
+                const clr    = close >= open ? COLORS.up : COLORS.down;
+                const chg    = open > 0 ? ((close - open) / open * 100) : 0;
                 const chgStr = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
 
-                return `<div style="font-size:12px;line-height:2;min-width:160px">
+                return `<div style="font-size:12px;line-height:2;min-width:170px">
                     <div style="font-weight:700;border-bottom:1px solid #eee;padding-bottom:2px;margin-bottom:3px">${dateStr}</div>
-                    <div>开&ensp;<b>${fmtPrice(o)}</b>&ensp;收&ensp;<b style="color:${clr}">${fmtPrice(c)}</b>&ensp;<span style="color:${clr};font-size:11px">${chgStr}</span></div>
-                    <div>高&ensp;<b style="color:${COLORS.up}">${fmtPrice(h)}</b>&ensp;低&ensp;<b style="color:${COLORS.down}">${fmtPrice(l)}</b></div>
+                    <div>开&ensp;<b>${fmtPrice(open)}</b>&ensp;收&ensp;<b style="color:${clr}">${fmtPrice(close)}</b>&ensp;<span style="color:${clr};font-size:11px">${chgStr}</span></div>
+                    <div>高&ensp;<b style="color:${COLORS.up}">${fmtPrice(high)}</b>&ensp;低&ensp;<b style="color:${COLORS.down}">${fmtPrice(low)}</b></div>
                     ${m && m.value != null
                         ? `<div>MA20&ensp;<b style="color:${COLORS.ma20}">${fmtPrice(m.value)}</b></div>`
                         : ''}
@@ -389,20 +401,14 @@ function drawVolumeChart(data) {
         title:    { text: '成交量', left: 'center', textStyle: { fontSize: 14 } },
         grid:     makeGrid(),
         xAxis:    makeXAxis(data.dates, false),
-        yAxis:    {
-            type: 'value', splitArea: { show: true },
-            axisLabel: { formatter: v => fmtNum(v), fontSize: 11 }
-        },
+        yAxis:    { type: 'value', splitArea: { show: true }, axisLabel: { formatter: v => fmtNum(v), fontSize: 11 } },
         dataZoom: makeZoom(),
         tooltip:  makeSubTooltip((params) => {
             const p = params[0];
             if (!p) return '';
             return `<span style="color:${COLORS.volume}">●</span>&nbsp;成交量&nbsp;<b>${fmtNum(p.value)}</b>`;
         }),
-        series: [{
-            name: '成交量', type: 'bar', data: data.volumes,
-            itemStyle: { color: COLORS.volume }, barMaxWidth: 8
-        }]
+        series: [{ name: '成交量', type: 'bar', data: data.volumes, itemStyle: { color: COLORS.volume }, barMaxWidth: 8 }]
     }, { notMerge: true });
 }
 
@@ -413,14 +419,8 @@ function drawOIChart(data) {
         grid:   makeGrid(),
         xAxis:  makeXAxis(data.dates, false),
         yAxis: [
-            {
-                type: 'value', name: '持仓量', position: 'left', splitArea: { show: true },
-                axisLabel: { formatter: v => fmtNum(v), fontSize: 11 }
-            },
-            {
-                type: 'value', name: '变幅(%)', position: 'right', splitLine: { show: false },
-                axisLabel: { formatter: v => v.toFixed(1) + '%', fontSize: 11 }
-            }
+            { type: 'value', name: '持仓量', position: 'left', splitArea: { show: true }, axisLabel: { formatter: v => fmtNum(v), fontSize: 11 } },
+            { type: 'value', name: '变幅(%)', position: 'right', splitLine: { show: false }, axisLabel: { formatter: v => v.toFixed(1) + '%', fontSize: 11 } }
         ],
         dataZoom: makeZoom(),
         tooltip: makeSubTooltip((params) => {
@@ -432,19 +432,11 @@ function drawOIChart(data) {
             ].filter(Boolean).join('<br/>');
         }),
         series: [
-            {
-                name: '持仓量', type: 'bar', data: data.oi,
-                itemStyle: { color: COLORS.oi }, barMaxWidth: 8
-            },
+            { name: '持仓量', type: 'bar', data: data.oi, itemStyle: { color: COLORS.oi }, barMaxWidth: 8 },
             {
                 name: '持仓量变幅', type: 'line', yAxisIndex: 1, data: data.oiChange,
-                lineStyle: { color: COLORS.oiChange, width: 2 },
-                symbol: 'circle', symbolSize: 3,
-                markLine: {
-                    silent: true, symbol: 'none',
-                    data: [{ yAxis: 0 }],
-                    lineStyle: { color: '#ef5350', type: 'dashed', width: 1.5 }
-                }
+                lineStyle: { color: COLORS.oiChange, width: 2 }, symbol: 'circle', symbolSize: 3,
+                markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0 }], lineStyle: { color: '#ef5350', type: 'dashed', width: 1.5 } }
             }
         ]
     }, { notMerge: true });
@@ -455,17 +447,14 @@ function drawPositionChart(data) {
         title:  { text: '家人 & 机构净持仓', left: 'center', textStyle: { fontSize: 14 } },
         legend: {
             data: [
-                { name: '家人净持仓', itemStyle: { color: COLORS.homie } },
-                { name: '机构净持仓', itemStyle: { color: COLORS.inst  } }
+                { name: '家人净持仓', itemStyle: { color: COLORS.homie }, lineStyle: { color: COLORS.homie } },
+                { name: '机构净持仓', itemStyle: { color: COLORS.inst  }, lineStyle: { color: COLORS.inst  } }
             ],
             top: 25
         },
         grid:   makeGrid(),
         xAxis:  makeXAxis(data.dates, false),
-        yAxis: {
-            type: 'value', splitArea: { show: true },
-            axisLabel: { formatter: v => fmtNum(v), fontSize: 11 }
-        },
+        yAxis:  { type: 'value', splitArea: { show: true }, axisLabel: { formatter: v => fmtNum(v), fontSize: 11 } },
         dataZoom: makeZoom(),
         tooltip: makeSubTooltip((params) => {
             const h = params.find(p => p.seriesName === '家人净持仓');
@@ -478,20 +467,12 @@ function drawPositionChart(data) {
         series: [
             {
                 name: '家人净持仓', type: 'line', data: data.homieNet,
-                lineStyle: { color: COLORS.homie, width: 2 },
-                itemStyle: { color: COLORS.homie },
-                symbol: 'circle', symbolSize: 3,
-                markLine: {
-                    silent: true, symbol: 'none',
-                    data: [{ yAxis: 0 }],
-                    lineStyle: { color: '#333', type: 'dashed', width: 1.5 }
-                }
+                lineStyle: { color: COLORS.homie, width: 2 }, itemStyle: { color: COLORS.homie }, symbol: 'circle', symbolSize: 3,
+                markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0 }], lineStyle: { color: '#333', type: 'dashed', width: 1.5 } }
             },
             {
                 name: '机构净持仓', type: 'line', data: data.instNet,
-                lineStyle: { color: COLORS.inst, width: 2 },
-                itemStyle: { color: COLORS.inst },
-                symbol: 'circle', symbolSize: 3
+                lineStyle: { color: COLORS.inst, width: 2 }, itemStyle: { color: COLORS.inst }, symbol: 'circle', symbolSize: 3
             }
         ]
     }, { notMerge: true });
@@ -504,15 +485,8 @@ function drawIVChart(data) {
         grid:   makeGrid(),
         xAxis:  makeXAxis(data.dates, false),
         yAxis: [
-            {
-                type: 'value', name: 'IV', position: 'left', splitArea: { show: true },
-                axisLabel: { formatter: v => v.toFixed(1) + '%', fontSize: 11 }
-            },
-            {
-                type: 'value', name: '分位数(%)', position: 'right',
-                min: 0, max: 100, splitLine: { show: false },
-                axisLabel: { formatter: v => v.toFixed(1) + '%', fontSize: 11 }
-            }
+            { type: 'value', name: 'IV', position: 'left', splitArea: { show: true }, axisLabel: { formatter: v => v.toFixed(1) + '%', fontSize: 11 } },
+            { type: 'value', name: '分位数(%)', position: 'right', min: 0, max: 100, splitLine: { show: false }, axisLabel: { formatter: v => v.toFixed(1) + '%', fontSize: 11 } }
         ],
         dataZoom: makeZoom(),
         tooltip: makeSubTooltip((params) => {
@@ -524,18 +498,8 @@ function drawIVChart(data) {
             ].filter(Boolean).join('<br/>');
         }),
         series: [
-            {
-                name: 'IV', type: 'line', data: data.iv,
-                lineStyle: { color: COLORS.iv, width: 2 },
-                itemStyle: { color: COLORS.iv },
-                symbol: 'circle', symbolSize: 3, connectNulls: true
-            },
-            {
-                name: 'IV60日分位数', type: 'line', yAxisIndex: 1, data: data.ivPct,
-                lineStyle: { color: COLORS.ivPct, width: 2, type: 'dashed' },
-                itemStyle: { color: COLORS.ivPct },
-                symbol: 'circle', symbolSize: 3
-            }
+            { name: 'IV', type: 'line', data: data.iv, lineStyle: { color: COLORS.iv, width: 2 }, itemStyle: { color: COLORS.iv }, symbol: 'circle', symbolSize: 3, connectNulls: true },
+            { name: 'IV60日分位数', type: 'line', yAxisIndex: 1, data: data.ivPct, lineStyle: { color: COLORS.ivPct, width: 2, type: 'dashed' }, itemStyle: { color: COLORS.ivPct }, symbol: 'circle', symbolSize: 3 }
         ]
     }, { notMerge: true });
 }
@@ -545,10 +509,7 @@ function drawCBChart(data) {
         title:    { text: '期限结构分数', left: 'center', textStyle: { fontSize: 14 } },
         grid:     makeGrid(),
         xAxis:    makeXAxis(data.dates, false),
-        yAxis:    {
-            type: 'value', splitArea: { show: true },
-            axisLabel: { formatter: v => v.toFixed(2), fontSize: 11 }
-        },
+        yAxis:    { type: 'value', splitArea: { show: true }, axisLabel: { formatter: v => v.toFixed(2), fontSize: 11 } },
         dataZoom: makeZoom(),
         tooltip:  makeSubTooltip((params) => {
             const p = params[0];
@@ -557,33 +518,18 @@ function drawCBChart(data) {
         }),
         series: [{
             name: '期限结构', type: 'line', data: data.cb,
-            lineStyle: { color: COLORS.cb, width: 2 },
-            itemStyle: { color: COLORS.cb },
-            symbol: 'circle', symbolSize: 3, connectNulls: true,
-            markLine: {
-                silent: true, symbol: 'none',
-                data: [{ yAxis: 0 }],
-                lineStyle: { color: '#999', type: 'dashed', width: 1.5 }
-            }
+            lineStyle: { color: COLORS.cb, width: 2 }, itemStyle: { color: COLORS.cb }, symbol: 'circle', symbolSize: 3, connectNulls: true,
+            markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0 }], lineStyle: { color: '#999', type: 'dashed', width: 1.5 } }
         }]
     }, { notMerge: true });
 }
 
 // ==================== 格式化工具 ====================
-function fmtPrice(v) {
-    if (v == null || isNaN(v)) return '-';
-    return Number(v).toFixed(2);
-}
-function fmtPct1(v) {
-    if (v == null || isNaN(v)) return '-';
-    return Number(v).toFixed(1) + '%';
-}
-function fmtCB(v) {
-    if (v == null || isNaN(v)) return '-';
-    return Number(v).toFixed(2);
-}
+function fmtPrice(v) { return (v == null || isNaN(v)) ? '-' : Number(v).toFixed(2); }
+function fmtPct1(v)  { return (v == null || isNaN(v)) ? '-' : Number(v).toFixed(1) + '%'; }
+function fmtCB(v)    { return (v == null || isNaN(v)) ? '-' : Number(v).toFixed(2); }
 function fmtNum(num) {
-    if (num === null || num === undefined || isNaN(num)) return '-';
+    if (num == null || isNaN(num)) return '-';
     const abs = Math.abs(num);
     if (abs >= 1e8) return (num / 1e8).toFixed(2) + '亿';
     if (abs >= 1e4) return (num / 1e4).toFixed(2) + '万';
@@ -592,38 +538,48 @@ function fmtNum(num) {
 function formatNumber(num) { return fmtNum(num); }
 
 // ==================== 统计面板 ====================
+// ★ 中国市场惯例：红涨绿跌，用内联样式直接指定颜色，不依赖 CSS 类名
+const CN_UP_STYLE   = `color:${COLORS.up};font-size:24px;font-weight:700`;
+const CN_DOWN_STYLE = `color:${COLORS.down};font-size:24px;font-weight:700`;
+const CN_NEU_STYLE  = `color:#212529;font-size:24px;font-weight:700`;
+
+function cnStyle(val) {
+    if (val == null || isNaN(val)) return CN_NEU_STYLE;
+    return val > 0 ? CN_UP_STYLE : (val < 0 ? CN_DOWN_STYLE : CN_NEU_STYLE);
+}
+
 function updateStatsPanel(data) {
     const lastIdx = data.dates.length - 1;
     const prevIdx = Math.max(0, lastIdx - 1);
-    const [, lastClose] = data.ohlc[lastIdx] || [0, 0];
-    const [, prevClose] = data.ohlc[prevIdx] || [0, lastClose];
-    const change    = lastClose - prevClose;
+    const open    = data.ohlc[lastIdx]?.[0] ?? 0;
+    const close   = data.ohlc[lastIdx]?.[1] ?? 0;
+    const prevClose = data.ohlc[prevIdx]?.[1] ?? close;
+    const change    = close - prevClose;
     const changePct = prevClose > 0 ? (change / prevClose * 100) : 0;
 
     const stats = [
-        { label: '最新收盘价', value: fmtPrice(lastClose),   className: change >= 0 ? 'positive' : 'negative' },
-        { label: '涨跌幅',     value: (changePct >= 0 ? '+' : '') + fmtPct1(changePct), className: changePct >= 0 ? 'positive' : 'negative' },
-        { label: '最新成交量', value: fmtNum(data.volumes[lastIdx]) },
-        { label: '最新持仓量', value: fmtNum(data.oi[lastIdx]) },
-        { label: '家人净持仓', value: fmtNum(data.homieNet[lastIdx]), className: (data.homieNet[lastIdx] || 0) >= 0 ? 'positive' : 'negative' },
-        { label: '机构净持仓', value: fmtNum(data.instNet[lastIdx]),  className: (data.instNet[lastIdx]  || 0) >= 0 ? 'positive' : 'negative' },
-        { label: 'IV',         value: fmtPct1(data.iv[lastIdx]) },
-        { label: '期限结构',   value: fmtCB(data.cb[lastIdx]),        className: (data.cb[lastIdx] || 0) >= 0 ? 'positive' : 'negative' }
+        { label: '最新收盘价', value: fmtPrice(close),   style: cnStyle(change) },
+        { label: '涨跌幅',     value: (changePct >= 0 ? '+' : '') + fmtPct1(changePct), style: cnStyle(changePct) },
+        { label: '最新成交量', value: fmtNum(data.volumes[lastIdx]),   style: CN_NEU_STYLE },
+        { label: '最新持仓量', value: fmtNum(data.oi[lastIdx]),        style: CN_NEU_STYLE },
+        { label: '家人净持仓', value: fmtNum(data.homieNet[lastIdx]),  style: cnStyle(data.homieNet[lastIdx]) },
+        { label: '机构净持仓', value: fmtNum(data.instNet[lastIdx]),   style: cnStyle(data.instNet[lastIdx]) },
+        { label: 'IV',         value: fmtPct1(data.iv[lastIdx]),       style: CN_NEU_STYLE },
+        { label: '期限结构',   value: fmtCB(data.cb[lastIdx]),         style: cnStyle(data.cb[lastIdx]) }
     ];
 
     document.getElementById('stats-panel').innerHTML = stats.map(s => `
         <div class="stat-item">
             <div class="stat-label">${s.label}</div>
-            <div class="stat-value ${s.className || ''}">${s.value}</div>
+            <div style="${s.style}">${s.value}</div>
         </div>
     `).join('');
 }
 
 function updateDateRange(data) {
-    if (!data || data.length === 0) return;
-    const getD  = r => getRawDate(r);
-    const first = normalizeDate(getD(data[0]));
-    const last  = normalizeDate(getD(data[data.length - 1]));
+    if (!data || !data.length) return;
+    const first = toFullDate(getRawDate(data[0]));
+    const last  = toFullDate(getRawDate(data[data.length - 1]));
     const si = document.getElementById('start-date');
     const ei = document.getElementById('end-date');
     si.min = first; si.max = last;
