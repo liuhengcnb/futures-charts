@@ -237,6 +237,15 @@ function processChartData(rawData) {
     const homieNet = [], instNet = [], iv = [], ivPct = [], cb = [], ma20 = [];
     const trend = [];   // ★ 趋势排名分位数
 
+    // 辅助函数：容错获取列值（处理空格、BOM头）
+    function getVal(row, candidates) {
+        for (const key of Object.keys(row)) {
+            const cleanKey = key.replace(/^\uFEFF/, '').trim();
+            if (candidates.includes(cleanKey)) return row[key];
+        }
+        return null;
+    }
+
     rawData.forEach(row => {
         dates.push(toCatDate(getRawDate(row)));
 
@@ -260,8 +269,8 @@ function processChartData(rawData) {
         const cbVal = row['CB_index'];
         cb.push(cbVal != null && cbVal !== '' ? parseFloat(cbVal) : null);
 
-        // ★ 趋势排名分位数：值域 0~1，乘以 100 转成百分比
-        const tVal = row['趋势排名分位数'];
+        // ★ 趋势排名分位数：使用 getVal 容错读取
+        const tVal = getVal(row, ['趋势排名分位数', 'trend', 'Trend', '趋势分位数']);
         if (tVal != null && tVal !== '') {
             const tv = parseFloat(tVal);
             // 如果原始值已经是 0~1 区间则 ×100，否则直接用
@@ -438,7 +447,7 @@ function drawOIChart(data) {
     }, { notMerge: true });
 }
 
-// ★ 新增：趋势排名分位数图
+// ★ 修改：趋势排名分位数图
 function drawTrendChart(data) {
     // 判断数据是否全为 null（该品种没有趋势数据时隐藏图表容器）
     const hasData = data.trend.some(v => v !== null && !isNaN(v));
@@ -468,7 +477,7 @@ function drawTrendChart(data) {
             name: '趋势排名分位数',
             type: 'line',
             data: data.trend,
-            connectNulls: true,            // 缺失值断开，不连线（稀疏数据友好）
+            connectNulls: true,             // ★ 修改点：强制连接跨越 null 值的点，以便观察低频数据趋势
             lineStyle: { color: COLORS.trend, width: 2 },
             itemStyle: { color: COLORS.trend },
             symbol:     'circle',
@@ -583,66 +592,4 @@ function fmtNum(num) {
     if (abs >= 1e4) return (num / 1e4).toFixed(2) + '万';
     return Math.round(num).toString();
 }
-function formatNumber(num) { return fmtNum(num); }
-
-// ==================== 统计面板 ====================
-const CN_UP_STYLE   = `color:#ef5350;font-size:24px;font-weight:700`;
-const CN_DOWN_STYLE = `color:#26a69a;font-size:24px;font-weight:700`;
-const CN_NEU_STYLE  = `color:#212529;font-size:24px;font-weight:700`;
-
-function cnStyle(val) {
-    if (val == null || isNaN(val)) return CN_NEU_STYLE;
-    return val > 0 ? CN_UP_STYLE : (val < 0 ? CN_DOWN_STYLE : CN_NEU_STYLE);
-}
-
-function updateStatsPanel(data) {
-    const lastIdx   = data.dates.length - 1;
-    const prevIdx   = Math.max(0, lastIdx - 1);
-    const open      = data.ohlc[lastIdx]?.[0] ?? 0;
-    const close     = data.ohlc[lastIdx]?.[1] ?? 0;
-    const prevClose = data.ohlc[prevIdx]?.[1]  ?? close;
-    const change    = close - prevClose;
-    const changePct = prevClose > 0 ? (change / prevClose * 100) : 0;
-
-    const stats = [
-        { label: '最新收盘价', value: fmtPrice(close),   style: cnStyle(change) },
-        { label: '涨跌幅',     value: (changePct >= 0 ? '+' : '') + fmtPct1(changePct), style: cnStyle(changePct) },
-        { label: '最新成交量', value: fmtNum(data.volumes[lastIdx]),   style: CN_NEU_STYLE },
-        { label: '最新持仓量', value: fmtNum(data.oi[lastIdx]),        style: CN_NEU_STYLE },
-        { label: '家人净持仓', value: fmtNum(data.homieNet[lastIdx]),  style: cnStyle(data.homieNet[lastIdx]) },
-        { label: '机构净持仓', value: fmtNum(data.instNet[lastIdx]),   style: cnStyle(data.instNet[lastIdx]) },
-        { label: 'IV',         value: fmtPct1(data.iv[lastIdx]),       style: CN_NEU_STYLE },
-        { label: '期限结构',   value: fmtCB(data.cb[lastIdx]),         style: cnStyle(data.cb[lastIdx]) }
-    ];
-
-    document.getElementById('stats-panel').innerHTML = stats.map(s => `
-        <div class="stat-item">
-            <div class="stat-label">${s.label}</div>
-            <div style="${s.style}">${s.value}</div>
-        </div>
-    `).join('');
-}
-
-function updateDateRange(data) {
-    if (!data || !data.length) return;
-    const first = toFullDate(getRawDate(data[0]));
-    const last  = toFullDate(getRawDate(data[data.length - 1]));
-    const si = document.getElementById('start-date');
-    const ei = document.getElementById('end-date');
-    si.min = first; si.max = last;
-    ei.min = first; ei.max = last;
-}
-
-// ==================== 覆盖层辅助 ====================
-function showLoading() {
-    const el = document.getElementById('loading-overlay');
-    if (el) { el.style.color = '#667eea'; el.textContent = '加载中...'; el.style.display = 'block'; }
-}
-function showError(msg) {
-    const el = document.getElementById('loading-overlay');
-    if (el) { el.style.color = '#dc3545'; el.textContent = msg; el.style.display = 'block'; }
-}
-function hideOverlay() {
-    const el = document.getElementById('loading-overlay');
-    if (el) el.style.display = 'none';
-}
+function formatNumber(num) { return fmtNum(num);
