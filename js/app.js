@@ -1,5 +1,3 @@
-// js/app.js
-
 // ==================== 全局配置 ====================
 const CONFIG = {
     dataPath: 'data/',
@@ -237,15 +235,6 @@ function processChartData(rawData) {
     const homieNet = [], instNet = [], iv = [], ivPct = [], cb = [], ma20 = [];
     const trend = [];   // ★ 趋势排名分位数
 
-    // 辅助函数：容错获取列值（处理空格、BOM头）
-    function getVal(row, candidates) {
-        for (const key of Object.keys(row)) {
-            const cleanKey = key.replace(/^\uFEFF/, '').trim();
-            if (candidates.includes(cleanKey)) return row[key];
-        }
-        return null;
-    }
-
     rawData.forEach(row => {
         dates.push(toCatDate(getRawDate(row)));
 
@@ -269,19 +258,12 @@ function processChartData(rawData) {
         const cbVal = row['CB_index'];
         cb.push(cbVal != null && cbVal !== '' ? parseFloat(cbVal) : null);
 
-        // ★ 修复：趋势排名分位数
-        const tVal = getVal(row, ['趋势排名分位数', 'trend', 'Trend', '趋势分位数']);
-        
-        // 1. 检查值是否存在且非空字符串
+        // ★ 趋势排名分位数：值域 0~1，乘以 100 转成百分比
+        const tVal = row['趋势排名分位数'];
         if (tVal != null && tVal !== '') {
             const tv = parseFloat(tVal);
-            // 2. 【关键修复】检查转换后是否为 NaN。如果是 "N/A"、"-" 等文本，parseFloat 会得到 NaN，必须转为 null
-            if (!isNaN(tv)) {
-                // 3. 如果是 0~1 之间的小数，视为百分比转为整数
-                trend.push(Math.abs(tv) <= 1 ? tv * 100 : tv);
-            } else {
-                trend.push(null);
-            }
+            // 如果原始值已经是 0~1 区间则 ×100，否则直接用
+            trend.push(Math.abs(tv) <= 1 ? tv * 100 : tv);
         } else {
             trend.push(null);
         }
@@ -454,9 +436,9 @@ function drawOIChart(data) {
     }, { notMerge: true });
 }
 
-// ★ 修改：趋势排名分位数图
+// ★ 新增：趋势排名分位数图
 function drawTrendChart(data) {
-    // 判断数据是否全为 null
+    // 判断数据是否全为 null（该品种没有趋势数据时隐藏图表容器）
     const hasData = data.trend.some(v => v !== null && !isNaN(v));
     const el = document.getElementById('chart-trend');
     if (el) el.style.display = hasData ? '' : 'none';
@@ -484,7 +466,7 @@ function drawTrendChart(data) {
             name: '趋势排名分位数',
             type: 'line',
             data: data.trend,
-            connectNulls: true,             // 强制连接跨越 null 值的点
+            connectNulls: false,            // 缺失值断开，不连线（稀疏数据友好）
             lineStyle: { color: COLORS.trend, width: 2 },
             itemStyle: { color: COLORS.trend },
             symbol:     'circle',
