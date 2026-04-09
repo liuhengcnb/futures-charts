@@ -470,7 +470,7 @@ function drawTrendChart(data) {
             lineStyle: { color: COLORS.trend, width: 2 },
             itemStyle: { color: COLORS.trend },
             symbol:     'circle',
-            symbolSize: 5,
+            symbolSize: 10,
             // 高低阈值参考线：80% 和 20%
             markLine: {
                 silent:   true,
