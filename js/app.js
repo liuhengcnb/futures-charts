@@ -468,7 +468,7 @@ function drawTrendChart(data) {
             name: '趋势排名分位数',
             type: 'line',
             data: data.trend,
-            connectNulls: false,            // 缺失值断开，不连线（稀疏数据友好）
+            connectNulls: true,            // 缺失值断开，不连线（稀疏数据友好）
             lineStyle: { color: COLORS.trend, width: 2 },
             itemStyle: { color: COLORS.trend },
             symbol:     'circle',
