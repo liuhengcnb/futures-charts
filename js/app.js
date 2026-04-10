@@ -26,7 +26,7 @@ const COLORS = {
 const CONTRACT_ORDER = [
     '欧线EC','碳酸锂LC','氧化铝AO','三十年国债TL','生猪LH','烧碱SH',
     'LPGPG','苯乙烯EB','焦煤JM','豆一A','沥青BU','中证1000IM',
-    '工业硅SI','白糖SR','尿素UR','玻璃FG','塑料L','硅铁SF',
+    '工业硅SI','多晶硅PS','白糖SR','尿素UR','玻璃FG','塑料L','硅铁SF',
     '纸浆SP','纯碱SA','乙二醇EG','棉花CF','不锈钢SS','豆粕M',
     '红枣CJ','二年国债TS','聚丙烯PP','20号胶NR','苹果AP','沪锡SN',
     '橡胶RU','锰硅SM','螺纹钢RB','焦炭J','玉米C','沪铝AL',
