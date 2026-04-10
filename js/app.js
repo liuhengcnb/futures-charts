@@ -544,7 +544,7 @@ function drawOIChart(data) {
 
 function drawATRChart(data) {
     CONFIG.charts.atr.setOption({
-        title:  { text: makeTitle('合约fullcode ATR和止损'), left: 'center', textStyle: { fontSize: 14 } },
+        title:  { text: makeTitle('ATR和止损'), left: 'center', textStyle: { fontSize: 14 } },
         legend: { data: ['ATRMA14', 'ATR60D60pct', '止损宽度'], top: 25 },
         grid:   makeGrid(),
         xAxis:  makeXAxis(data.dates, false),
