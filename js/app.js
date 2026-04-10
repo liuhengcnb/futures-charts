@@ -1,54 +1,56 @@
+// js/app.js
+
 // ==================== 全局配置 ====================
 const CONFIG = {
     dataPath: 'data/',
     charts: {},
-    currentDates: [],   // 存 "yy-mm-dd" 格式，防止 ECharts 误识别为 ISO 日期
+    currentDates: [],
     grid: { left: 85, right: 85, top: 50, bottom: 30 }
 };
 
 // 颜色配置（中国市场惯例：红涨绿跌）
 const COLORS = {
-    up:       '#ef5350',  // 涨 - 红
-    down:     '#26a69a',  // 跌 - 绿
-    ma20:     '#FF6D00',  // MA20 - 深橙
-    volume:   '#78909c',  // 成交量 - 蓝灰
-    oi:       '#42a5f5',  // 持仓量 - 蓝
-    oiChange: '#FF6D00',  // 持仓量变幅 - 深橙
-    homie:    '#9C27B0',  // 家人净持仓 - 紫
-    inst:     '#ef5350',  // 机构净持仓 - 红
-    iv:       '#00BCD4',  // IV - 青
-    ivPct:    '#66bb6a',  // IV分位数 - 绿
-    cb:       '#8d6e63',  // 期限结构 - 棕
-    trend:    '#5C6BC0'   // 趋势排名分位数 - 靛蓝
+    up:       '#ef5350',
+    down:     '#26a69a',
+    ma20:     '#FF6D00',
+    volume:   '#78909c',
+    oi:       '#42a5f5',
+    oiChange: '#FF6D00',
+    homie:    '#9C27B0',
+    inst:     '#ef5350',
+    iv:       '#00BCD4',
+    ivPct:    '#66bb6a',
+    cb:       '#8d6e63',
+    trend:    '#5C6BC0'
 };
 
-// ==================== 日期工具 ====================
+// ★ 自定义合约下拉顺序（按 display_name 排列）
+const CONTRACT_ORDER = [
+    '欧线EC','碳酸锂LC','氧化铝AO','三十年国债TL','生猪LH','烧碱SH',
+    'LPGPG','苯乙烯EB','焦煤JM','豆一A','沥青BU','中证1000IM',
+    '工业硅SI','白糖SR','尿素UR','玻璃FG','塑料L','硅铁SF','纸浆SP',
+    '纯碱SA','乙二醇EG','棉花CF','不锈钢SS','豆粕M','红枣CJ',
+    '二年国债TS','聚丙烯PP','20号胶NR','苹果AP','沪锡SN','橡胶RU',
+    '锰硅SM','螺纹钢RB','焦炭J','玉米C','沪铝AL','铁矿石I','原油SC',
+    '五年国债TF','甲醇MA','菜粕RM','十年国债T','PVCV','鸡蛋JD',
+    '棕榈油P','PTATA','豆油Y','沪银AG','沪铅PB','沪深300IF',
+    '菜油OI','沪金AU','沪铜CU','沪锌ZN','燃油FU','沪镍NI',
+    // 以上列表之外的品种兜底排在末尾
+];
 
+// ==================== 日期工具 ====================
 function toDigits8(raw) {
     if (!raw) return '';
     return String(raw).replace(/\s/g, '').replace(/[-\/]/g, '');
 }
-
-/**
- * 存入 ECharts category 轴的格式："yy-mm-dd"（例："25-02-19"）
- * 两位年份 + 连字符，ECharts 无法识别为 ISO 日期
- */
 function toCatDate(raw) {
     const d = toDigits8(raw);
     if (d.length < 8) return d;
     return `${d.substr(2,2)}-${d.substr(4,2)}-${d.substr(6,2)}`;
 }
-
-/**
- * 把 category 轴的值（"yy-mm-dd"）转成 6 位显示字符串 "yymmdd"
- */
 function toDisplay(catVal) {
     return String(catVal || '').replace(/[-\/]/g, '').trim();
 }
-
-/**
- * 规范化为 "yyyy-mm-dd"，用于日期范围过滤
- */
 function toFullDate(raw) {
     const d = toDigits8(raw);
     if (d.length === 8)
@@ -75,8 +77,19 @@ async function initContractSelect() {
         const resp = await fetch(CONFIG.dataPath + 'manifest.json');
         if (!resp.ok) throw new Error('未找到 manifest.json');
         const files = await resp.json();
+
+        // ★ 按 CONTRACT_ORDER 排序；列表里没有的品种追加到末尾（保持原顺序）
+        const orderMap = {};
+        CONTRACT_ORDER.forEach((name, i) => { orderMap[name] = i; });
+
+        const sorted = [...files].sort((a, b) => {
+            const ia = orderMap[a.display_name] ?? CONTRACT_ORDER.length;
+            const ib = orderMap[b.display_name] ?? CONTRACT_ORDER.length;
+            return ia - ib;
+        });
+
         select.innerHTML = '';
-        files.forEach(f => {
+        sorted.forEach(f => {
             const opt = document.createElement('option');
             opt.value = f.filename;
             opt.textContent = f.display_name;
@@ -105,7 +118,6 @@ function initEventListeners() {
 }
 
 function initCharts() {
-    // ★ 加入 trend
     ['kline', 'volume', 'oi', 'trend', 'position', 'iv', 'cb'].forEach(key => {
         const el = document.getElementById(`chart-${key}`);
         if (el) CONFIG.charts[key] = echarts.init(el);
@@ -126,7 +138,6 @@ function setupChartLinkage() {
         src.off('globalout');
         src.off('datazoom');
 
-        // 悬浮竖线联动
         src.on('updateAxisPointer', (evt) => {
             if (_syncing) return;
             let idx = evt.dataIndex;
@@ -153,7 +164,6 @@ function setupChartLinkage() {
             _syncing = false;
         });
 
-        // 缩放联动（手动同步，修复 bar 图不跟随问题）
         src.on('datazoom', (evt) => {
             if (_syncing) return;
             let start, end;
@@ -174,7 +184,6 @@ function setupChartLinkage() {
 }
 
 // ==================== 数据加载 ====================
-
 function getRawDate(row) {
     for (const key of Object.keys(row)) {
         const k = key.replace(/^\uFEFF/, '').trim();
@@ -204,14 +213,13 @@ async function loadChartData(filename) {
         drawKlineChart(chartData);
         drawVolumeChart(chartData);
         drawOIChart(chartData);
-        drawTrendChart(chartData);      // ★ 新增
+        drawTrendChart(chartData);
         drawPositionChart(chartData);
         drawIVChart(chartData);
         drawCBChart(chartData);
 
         setupChartLinkage();
         hideOverlay();
-        updateStatsPanel(chartData);
     } catch (e) {
         console.error('加载失败:', e);
         showError('加载数据失败: ' + e.message);
@@ -233,7 +241,7 @@ function filterByDate(rawData, startDate, endDate) {
 function processChartData(rawData) {
     const dates = [], ohlc = [], volumes = [], oi = [], oiChange = [];
     const homieNet = [], instNet = [], iv = [], ivPct = [], cb = [], ma20 = [];
-    const trend = [];   // ★ 趋势排名分位数
+    const trend = [];
 
     rawData.forEach(row => {
         dates.push(toCatDate(getRawDate(row)));
@@ -258,11 +266,9 @@ function processChartData(rawData) {
         const cbVal = row['CB_index'];
         cb.push(cbVal != null && cbVal !== '' ? parseFloat(cbVal) : null);
 
-        // ★ 趋势排名分位数：值域 0~1，乘以 100 转成百分比
         const tVal = row['趋势排名分位数'];
         if (tVal != null && tVal !== '') {
             const tv = parseFloat(tVal);
-            // 如果原始值已经是 0~1 区间则 ×100，否则直接用
             trend.push(Math.abs(tv) <= 1 ? tv * 100 : tv);
         } else {
             trend.push(null);
@@ -273,7 +279,6 @@ function processChartData(rawData) {
 }
 
 // ==================== 通用配置生成器 ====================
-
 function makeXAxis(dates, showLabel) {
     return {
         type: 'category',
@@ -282,23 +287,17 @@ function makeXAxis(dates, showLabel) {
         axisTick:  { alignWithLabel: true },
         axisLine:  { onZero: false },
         axisLabel: showLabel
-            ? {
-                show: true,
-                fontSize: 10,
-                color: '#666',
+            ? { show: true, fontSize: 10, color: '#666',
                 interval: Math.max(0, Math.floor(dates.length / 13) - 1),
-                formatter: v => toDisplay(v)
-            }
+                formatter: v => toDisplay(v) }
             : { show: false }
     };
 }
 
 function makeGrid(extraBottom) {
     return {
-        left:         CONFIG.grid.left,
-        right:        CONFIG.grid.right,
-        top:          CONFIG.grid.top,
-        bottom:       CONFIG.grid.bottom + (extraBottom || 0),
+        left: CONFIG.grid.left, right: CONFIG.grid.right,
+        top:  CONFIG.grid.top,  bottom: CONFIG.grid.bottom + (extraBottom || 0),
         containLabel: false
     };
 }
@@ -309,83 +308,52 @@ function makeZoom() {
 
 function makeSubTooltip(bodyFormatter) {
     return {
-        trigger:      'axis',
-        confine:      true,
-        appendToBody: true,
-        axisPointer: {
-            type:      'line',
-            lineStyle: { color: 'rgba(80,80,80,0.45)', type: 'dashed', width: 1 }
-        },
+        trigger: 'axis', confine: true, appendToBody: true,
+        axisPointer: { type: 'line', lineStyle: { color: 'rgba(80,80,80,0.45)', type: 'dashed', width: 1 } },
         formatter(params) {
             if (!params || !params.length) return '';
             const dateStr = toDisplay(params[0].axisValue);
             const header  = `<div style="font-weight:700;border-bottom:1px solid #eee;padding-bottom:2px;margin-bottom:3px">${dateStr}</div>`;
-            const body    = bodyFormatter(params);
-            return `<div style="font-size:12px;line-height:2;min-width:130px">${header}${body}</div>`;
+            return `<div style="font-size:12px;line-height:2;min-width:130px">${header}${bodyFormatter(params)}</div>`;
         }
     };
 }
 
 // ==================== 绘图函数 ====================
-
 function drawKlineChart(data) {
     CONFIG.charts.kline.setOption({
         title:  { text: '价格走势', left: 'center', textStyle: { fontSize: 16 } },
         legend: { data: ['K线', 'MA20'], top: 28 },
         grid:   makeGrid(),
         xAxis:  makeXAxis(data.dates, true),
-        yAxis: {
-            type: 'value', scale: true, splitArea: { show: true }, position: 'left',
-            axisLabel: { fontSize: 11 }
-        },
+        yAxis:  { type: 'value', scale: true, splitArea: { show: true }, position: 'left', axisLabel: { fontSize: 11 } },
         dataZoom: makeZoom(),
         tooltip: {
-            trigger:      'axis',
-            confine:      true,
-            appendToBody: true,
-            axisPointer: {
-                type:      'line',
-                lineStyle: { color: 'rgba(80,80,80,0.45)', type: 'dashed', width: 1 }
-            },
+            trigger: 'axis', confine: true, appendToBody: true,
+            axisPointer: { type: 'line', lineStyle: { color: 'rgba(80,80,80,0.45)', type: 'dashed', width: 1 } },
             formatter(params) {
                 if (!params || !params.length) return '';
                 const k = params.find(p => p.seriesName === 'K线');
                 const m = params.find(p => p.seriesName === 'MA20');
                 if (!k || !Array.isArray(k.value)) return '';
-
                 const dateStr = toDisplay(params[0].axisValue);
-                const open  = k.value[0];
-                const close = k.value[1];
-                const low   = k.value[2];
-                const high  = k.value[3];
-
-                const clr    = close >= open ? COLORS.up : COLORS.down;
-                const chg    = open > 0 ? ((close - open) / open * 100) : 0;
+                const open = k.value[0], close = k.value[1], low = k.value[2], high = k.value[3];
+                const clr = close >= open ? COLORS.up : COLORS.down;
+                const chg = open > 0 ? ((close - open) / open * 100) : 0;
                 const chgStr = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
-
                 return `<div style="font-size:12px;line-height:2;min-width:170px">
                     <div style="font-weight:700;border-bottom:1px solid #eee;padding-bottom:2px;margin-bottom:3px">${dateStr}</div>
                     <div>开&ensp;<b>${fmtPrice(open)}</b>&ensp;收&ensp;<b style="color:${clr}">${fmtPrice(close)}</b>&ensp;<span style="color:${clr};font-size:11px">${chgStr}</span></div>
                     <div>高&ensp;<b style="color:${COLORS.up}">${fmtPrice(high)}</b>&ensp;低&ensp;<b style="color:${COLORS.down}">${fmtPrice(low)}</b></div>
-                    ${m && m.value != null
-                        ? `<div>MA20&ensp;<b style="color:${COLORS.ma20}">${fmtPrice(m.value)}</b></div>`
-                        : ''}
+                    ${m && m.value != null ? `<div>MA20&ensp;<b style="color:${COLORS.ma20}">${fmtPrice(m.value)}</b></div>` : ''}
                 </div>`;
             }
         },
         series: [
-            {
-                name: 'K线', type: 'candlestick', data: data.ohlc,
-                itemStyle: {
-                    color: COLORS.up, color0: COLORS.down,
-                    borderColor: COLORS.up, borderColor0: COLORS.down
-                }
-            },
-            {
-                name: 'MA20', type: 'line', data: data.ma20,
-                smooth: true, symbol: 'none', connectNulls: true,
-                lineStyle: { width: 2, color: COLORS.ma20 }
-            }
+            { name: 'K线', type: 'candlestick', data: data.ohlc,
+              itemStyle: { color: COLORS.up, color0: COLORS.down, borderColor: COLORS.up, borderColor0: COLORS.down } },
+            { name: 'MA20', type: 'line', data: data.ma20, smooth: true, symbol: 'none', connectNulls: true,
+              lineStyle: { width: 2, color: COLORS.ma20 } }
         ]
     }, { notMerge: true });
 }
@@ -397,10 +365,9 @@ function drawVolumeChart(data) {
         xAxis:    makeXAxis(data.dates, false),
         yAxis:    { type: 'value', splitArea: { show: true }, axisLabel: { formatter: v => fmtNum(v), fontSize: 11 } },
         dataZoom: makeZoom(),
-        tooltip:  makeSubTooltip((params) => {
+        tooltip:  makeSubTooltip(params => {
             const p = params[0];
-            if (!p) return '';
-            return `<span style="color:${COLORS.volume}">●</span>&nbsp;成交量&nbsp;<b>${fmtNum(p.value)}</b>`;
+            return p ? `<span style="color:${COLORS.volume}">●</span>&nbsp;成交量&nbsp;<b>${fmtNum(p.value)}</b>` : '';
         }),
         series: [{ name: '成交量', type: 'bar', data: data.volumes, itemStyle: { color: COLORS.volume }, barMaxWidth: 8 }]
     }, { notMerge: true });
@@ -417,7 +384,7 @@ function drawOIChart(data) {
             { type: 'value', name: '变幅(%)', position: 'right', splitLine: { show: false }, axisLabel: { formatter: v => v.toFixed(1) + '%', fontSize: 11 } }
         ],
         dataZoom: makeZoom(),
-        tooltip: makeSubTooltip((params) => {
+        tooltip: makeSubTooltip(params => {
             const oiP = params.find(p => p.seriesName === '持仓量');
             const chP = params.find(p => p.seriesName === '持仓量变幅');
             return [
@@ -427,18 +394,14 @@ function drawOIChart(data) {
         }),
         series: [
             { name: '持仓量', type: 'bar', data: data.oi, itemStyle: { color: COLORS.oi }, barMaxWidth: 8 },
-            {
-                name: '持仓量变幅', type: 'line', yAxisIndex: 1, data: data.oiChange,
-                lineStyle: { color: COLORS.oiChange, width: 2 }, symbol: 'circle', symbolSize: 3,
-                markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0 }], lineStyle: { color: '#ef5350', type: 'dashed', width: 1.5 } }
-            }
+            { name: '持仓量变幅', type: 'line', yAxisIndex: 1, data: data.oiChange,
+              lineStyle: { color: COLORS.oiChange, width: 2 }, symbol: 'circle', symbolSize: 3,
+              markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0 }], lineStyle: { color: '#ef5350', type: 'dashed', width: 1.5 } } }
         ]
     }, { notMerge: true });
 }
 
-// ★ 新增：趋势排名分位数图
 function drawTrendChart(data) {
-    // 判断数据是否全为 null（该品种没有趋势数据时隐藏图表容器）
     const hasData = data.trend.some(v => v !== null && !isNaN(v));
     const el = document.getElementById('chart-trend');
     if (el) el.style.display = hasData ? '' : 'none';
@@ -449,42 +412,30 @@ function drawTrendChart(data) {
         grid:   makeGrid(),
         xAxis:  makeXAxis(data.dates, false),
         yAxis: {
-            type: 'value',
-            min: 0,
-            max: 100,
-            splitArea: { show: true },
-            axisLabel: { formatter: v => v.toFixed(0) + '%', fontSize: 11 },
-            splitLine: { show: true }
+            type: 'value', min: 0, max: 100, splitArea: { show: true },
+            axisLabel: { formatter: v => v.toFixed(0) + '%', fontSize: 11 }
         },
         dataZoom: makeZoom(),
-        tooltip: makeSubTooltip((params) => {
+        tooltip: makeSubTooltip(params => {
             const p = params[0];
-            if (!p || p.value == null) return '';
-            return `<span style="color:${COLORS.trend}">●</span>&nbsp;趋势排名分位数&nbsp;<b>${fmtPct1(p.value)}</b>`;
+            return (p && p.value != null)
+                ? `<span style="color:${COLORS.trend}">●</span>&nbsp;趋势排名分位数&nbsp;<b>${fmtPct1(p.value)}</b>`
+                : '';
         }),
         series: [{
-            name: '趋势排名分位数',
-            type: 'line',
-            data: data.trend,
-            connectNulls: true,            // 缺失值断开，不连线（稀疏数据友好）
-            lineStyle: { color: COLORS.trend, width: 2 },
-            itemStyle: { color: COLORS.trend },
-            symbol:     'circle',
-            symbolSize: 10,
-            // 高低阈值参考线：80% 和 20%
+            name: '趋势排名分位数', type: 'line', data: data.trend, connectNulls: false,
+            lineStyle: { color: COLORS.trend, width: 2 }, itemStyle: { color: COLORS.trend },
+            symbol: 'circle', symbolSize: 10,
             markLine: {
-                silent:   true,
-                symbol:   'none',
-                label:    { show: true, position: 'insideEndTop', fontSize: 10 },
-                lineStyle: { type: 'dashed', width: 1 },
+                silent: true, symbol: 'none',
+                label: { show: true, position: 'insideEndTop', fontSize: 10 },
                 data: [
-                    { yAxis: 80, name: '80%', lineStyle: { color: COLORS.up   } },
-                    { yAxis: 20, name: '20%', lineStyle: { color: COLORS.down } }
+                    { yAxis: 80, name: '80%', lineStyle: { color: COLORS.up,   type: 'dashed', width: 1 } },
+                    { yAxis: 20, name: '20%', lineStyle: { color: COLORS.down, type: 'dashed', width: 1 } }
                 ]
             }
         }]
     }, { notMerge: true });
-
     CONFIG.charts.trend.resize();
 }
 
@@ -495,14 +446,13 @@ function drawPositionChart(data) {
             data: [
                 { name: '家人净持仓', itemStyle: { color: COLORS.homie }, lineStyle: { color: COLORS.homie } },
                 { name: '机构净持仓', itemStyle: { color: COLORS.inst  }, lineStyle: { color: COLORS.inst  } }
-            ],
-            top: 25
+            ], top: 25
         },
         grid:   makeGrid(),
         xAxis:  makeXAxis(data.dates, false),
         yAxis:  { type: 'value', splitArea: { show: true }, axisLabel: { formatter: v => fmtNum(v), fontSize: 11 } },
         dataZoom: makeZoom(),
-        tooltip: makeSubTooltip((params) => {
+        tooltip: makeSubTooltip(params => {
             const h = params.find(p => p.seriesName === '家人净持仓');
             const i = params.find(p => p.seriesName === '机构净持仓');
             return [
@@ -511,15 +461,11 @@ function drawPositionChart(data) {
             ].filter(Boolean).join('<br/>');
         }),
         series: [
-            {
-                name: '家人净持仓', type: 'line', data: data.homieNet,
-                lineStyle: { color: COLORS.homie, width: 2 }, itemStyle: { color: COLORS.homie }, symbol: 'circle', symbolSize: 3,
-                markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0 }], lineStyle: { color: '#333', type: 'dashed', width: 1.5 } }
-            },
-            {
-                name: '机构净持仓', type: 'line', data: data.instNet,
-                lineStyle: { color: COLORS.inst, width: 2 }, itemStyle: { color: COLORS.inst }, symbol: 'circle', symbolSize: 3
-            }
+            { name: '家人净持仓', type: 'line', data: data.homieNet,
+              lineStyle: { color: COLORS.homie, width: 2 }, itemStyle: { color: COLORS.homie }, symbol: 'circle', symbolSize: 3,
+              markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0 }], lineStyle: { color: '#333', type: 'dashed', width: 1.5 } } },
+            { name: '机构净持仓', type: 'line', data: data.instNet,
+              lineStyle: { color: COLORS.inst, width: 2 }, itemStyle: { color: COLORS.inst }, symbol: 'circle', symbolSize: 3 }
         ]
     }, { notMerge: true });
 }
@@ -535,7 +481,7 @@ function drawIVChart(data) {
             { type: 'value', name: '分位数(%)', position: 'right', min: 0, max: 100, splitLine: { show: false }, axisLabel: { formatter: v => v.toFixed(1) + '%', fontSize: 11 } }
         ],
         dataZoom: makeZoom(),
-        tooltip: makeSubTooltip((params) => {
+        tooltip: makeSubTooltip(params => {
             const ivP    = params.find(p => p.seriesName === 'IV');
             const ivPctP = params.find(p => p.seriesName === 'IV60日分位数');
             return [
@@ -545,7 +491,8 @@ function drawIVChart(data) {
         }),
         series: [
             { name: 'IV', type: 'line', data: data.iv, lineStyle: { color: COLORS.iv, width: 2 }, itemStyle: { color: COLORS.iv }, symbol: 'circle', symbolSize: 3, connectNulls: true },
-            { name: 'IV60日分位数', type: 'line', yAxisIndex: 1, data: data.ivPct, lineStyle: { color: COLORS.ivPct, width: 2, type: 'dashed' }, itemStyle: { color: COLORS.ivPct }, symbol: 'circle', symbolSize: 3 }
+            { name: 'IV60日分位数', type: 'line', yAxisIndex: 1, data: data.ivPct,
+              lineStyle: { color: COLORS.ivPct, width: 2, type: 'dashed' }, itemStyle: { color: COLORS.ivPct }, symbol: 'circle', symbolSize: 3 }
         ]
     }, { notMerge: true });
 }
@@ -557,10 +504,9 @@ function drawCBChart(data) {
         xAxis:    makeXAxis(data.dates, false),
         yAxis:    { type: 'value', splitArea: { show: true }, axisLabel: { formatter: v => v.toFixed(2), fontSize: 11 } },
         dataZoom: makeZoom(),
-        tooltip:  makeSubTooltip((params) => {
+        tooltip:  makeSubTooltip(params => {
             const p = params[0];
-            if (!p) return '';
-            return `<span style="color:${COLORS.cb}">●</span>&nbsp;期限结构分数&nbsp;<b>${fmtCB(p.value)}</b>`;
+            return p ? `<span style="color:${COLORS.cb}">●</span>&nbsp;期限结构分数&nbsp;<b>${fmtCB(p.value)}</b>` : '';
         }),
         series: [{
             name: '期限结构', type: 'line', data: data.cb,
@@ -582,44 +528,6 @@ function fmtNum(num) {
     return Math.round(num).toString();
 }
 function formatNumber(num) { return fmtNum(num); }
-
-// ==================== 统计面板 ====================
-const CN_UP_STYLE   = `color:#ef5350;font-size:24px;font-weight:700`;
-const CN_DOWN_STYLE = `color:#26a69a;font-size:24px;font-weight:700`;
-const CN_NEU_STYLE  = `color:#212529;font-size:24px;font-weight:700`;
-
-function cnStyle(val) {
-    if (val == null || isNaN(val)) return CN_NEU_STYLE;
-    return val > 0 ? CN_UP_STYLE : (val < 0 ? CN_DOWN_STYLE : CN_NEU_STYLE);
-}
-
-function updateStatsPanel(data) {
-    const lastIdx   = data.dates.length - 1;
-    const prevIdx   = Math.max(0, lastIdx - 1);
-    const open      = data.ohlc[lastIdx]?.[0] ?? 0;
-    const close     = data.ohlc[lastIdx]?.[1] ?? 0;
-    const prevClose = data.ohlc[prevIdx]?.[1]  ?? close;
-    const change    = close - prevClose;
-    const changePct = prevClose > 0 ? (change / prevClose * 100) : 0;
-
-    const stats = [
-        { label: '最新收盘价', value: fmtPrice(close),   style: cnStyle(change) },
-        { label: '涨跌幅',     value: (changePct >= 0 ? '+' : '') + fmtPct1(changePct), style: cnStyle(changePct) },
-        { label: '最新成交量', value: fmtNum(data.volumes[lastIdx]),   style: CN_NEU_STYLE },
-        { label: '最新持仓量', value: fmtNum(data.oi[lastIdx]),        style: CN_NEU_STYLE },
-        { label: '家人净持仓', value: fmtNum(data.homieNet[lastIdx]),  style: cnStyle(data.homieNet[lastIdx]) },
-        { label: '机构净持仓', value: fmtNum(data.instNet[lastIdx]),   style: cnStyle(data.instNet[lastIdx]) },
-        { label: 'IV',         value: fmtPct1(data.iv[lastIdx]),       style: CN_NEU_STYLE },
-        { label: '期限结构',   value: fmtCB(data.cb[lastIdx]),         style: cnStyle(data.cb[lastIdx]) }
-    ];
-
-    document.getElementById('stats-panel').innerHTML = stats.map(s => `
-        <div class="stat-item">
-            <div class="stat-label">${s.label}</div>
-            <div style="${s.style}">${s.value}</div>
-        </div>
-    `).join('');
-}
 
 function updateDateRange(data) {
     if (!data || !data.length) return;
