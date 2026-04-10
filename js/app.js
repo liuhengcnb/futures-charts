@@ -27,7 +27,10 @@ const COLORS = {
     ivPct:    '#66bb6a',
     ivUp:     '#FF0000',
     cb:       '#8d6e63',
-    trend:    '#5C6BC0'
+    trend:    '#5C6BC0',
+    atrMA14:     '#FF5722',
+    atr60D60Pct: '#00BCD4',
+    stopLoss:    '#E91E63'
 };
 
 // ==================== 自定义合约顺序 ====================
@@ -126,7 +129,7 @@ function initEventListeners() {
 }
 
 function initCharts() {
-    ['kline', 'volume', 'oi', 'trend', 'position', 'iv', 'cb'].forEach(key => {
+    ['kline', 'volume', 'oi', 'atr', 'trend', 'position', 'iv', 'cb'].forEach(key => {
         const el = document.getElementById(`chart-${key}`);
         if (el) CONFIG.charts[key] = echarts.init(el);
     });
@@ -226,6 +229,7 @@ async function loadChartData(filename) {
         drawKlineChart(chartData);
         drawVolumeChart(chartData);
         drawOIChart(chartData);
+        drawATRChart(chartData);
         drawTrendChart(chartData);
         drawPositionChart(chartData);
         drawIVChart(chartData);
@@ -256,6 +260,7 @@ function processChartData(rawData) {
     const homieNet = [], instNet = [], iv = [], ivPct = [], cb = [], ma20 = [];
     const trend = [], ma5 = [], dkx = [], madkx = [], volMa10 = [];
     const volAmplify = [], ivUpSignal = [];
+    const atrMA14 = [], atr60D60Pct = [], stopLossWidth = [];
 
     rawData.forEach((row, idx) => {
         dates.push(toCatDate(getRawDate(row)));
@@ -302,9 +307,13 @@ function processChartData(rawData) {
         } else {
             trend.push(null);
         }
+
+        atrMA14.push(parseFloat(row['ATRMA14']) || null);
+        atr60D60Pct.push(parseFloat(row['ATR60D60pct']) || null);
+        stopLossWidth.push(parseFloat(row['止损宽度']) || null);
     });
 
-    return { dates, ohlc, volumes, volMa10, volAmplify, oi, oiChange, homieNet, instNet, iv, ivPct, ivUpSignal, cb, ma20, ma5, dkx, madkx, trend };
+    return { dates, ohlc, volumes, volMa10, volAmplify, oi, oiChange, homieNet, instNet, iv, ivPct, ivUpSignal, cb, ma20, ma5, dkx, madkx, trend, atrMA14, atr60D60Pct, stopLossWidth };
 }
 
 // ==================== 通用配置生成器 ====================
@@ -528,6 +537,50 @@ function drawOIChart(data) {
                 name: '持仓量变幅', type: 'line', yAxisIndex: 1, data: data.oiChange,
                 lineStyle: { color: COLORS.oiChange, width: 2 }, symbol: 'circle', symbolSize: 3,
                 markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0 }], lineStyle: { color: '#ef5350', type: 'dashed', width: 1.5 } }
+            }
+        ]
+    }, { notMerge: true });
+}
+
+function drawATRChart(data) {
+    CONFIG.charts.atr.setOption({
+        title:  { text: makeTitle('合约fullcode ATR和止损'), left: 'center', textStyle: { fontSize: 14 } },
+        legend: { data: ['ATRMA14', 'ATR60D60pct', '止损宽度'], top: 25 },
+        grid:   makeGrid(),
+        xAxis:  makeXAxis(data.dates, false),
+        yAxis:  { type: 'value', splitArea: { show: true }, axisLabel: { formatter: v => fmtPrice(v), fontSize: 11 } },
+        dataZoom: makeZoom(),
+        tooltip: makeSubTooltip((params) => {
+            let html = '';
+            params.forEach(p => {
+                if (p.seriesName === 'ATRMA14' && p.value != null) {
+                    html += `<span style="color:${COLORS.atrMA14}">●</span>&nbsp;ATRMA14&nbsp;<b>${fmtPrice(p.value)}</b><br/>`;
+                } else if (p.seriesName === 'ATR60D60pct' && p.value != null) {
+                    html += `<span style="color:${COLORS.atr60D60Pct}">●</span>&nbsp;ATR60D60pct&nbsp;<b>${fmtPrice(p.value)}</b><br/>`;
+                } else if (p.seriesName === '止损宽度' && p.value != null) {
+                    html += `<span style="color:${COLORS.stopLoss}">●</span>&nbsp;止损宽度&nbsp;<b>${fmtPrice(p.value)}</b><br/>`;
+                }
+            });
+            return html;
+        }),
+        series: [
+            {
+                name: 'ATRMA14', type: 'line', data: data.atrMA14,
+                smooth: true, symbol: 'none', connectNulls: true,
+                lineStyle: { width: 2, color: COLORS.atrMA14 },
+                itemStyle: { color: COLORS.atrMA14 }
+            },
+            {
+                name: 'ATR60D60pct', type: 'line', data: data.atr60D60Pct,
+                smooth: true, symbol: 'none', connectNulls: true,
+                lineStyle: { width: 2, color: COLORS.atr60D60Pct },
+                itemStyle: { color: COLORS.atr60D60Pct }
+            },
+            {
+                name: '止损宽度', type: 'line', data: data.stopLossWidth,
+                smooth: true, symbol: 'none', connectNulls: true,
+                lineStyle: { width: 2, color: COLORS.stopLoss },
+                itemStyle: { color: COLORS.stopLoss }
             }
         ]
     }, { notMerge: true });
