@@ -1,5 +1,18 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+<script type="text/javascript">
+  // 密码验证 - 放在最前面确保第一时间执行
+  function checkPassword() {
+    var password = prompt("请输入访问密码：");
+    if (password !== "zhuadabo") { // 这里修改为你想要的密码
+      alert("密码错误，无法访问！");
+      document.body.innerHTML = ""; // 清空页面内容
+      window.location.href = "about:blank"; // 跳转到空白页
+    }
+  }
+  checkPassword();
+</script>
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
