@@ -1,34 +1,22 @@
 <!DOCTYPE html>
-<html lang="zh-CN" style="display:none">
+<html lang="zh-CN">
 <script type="text/javascript">
   // 密码验证 - 放在最前面确保第一时间执行
   (function() {
-    // 立即隐藏整个页面
-    document.documentElement.style.display = 'none';
-    document.write('<style>html,body{display:none !important;height:100%;margin:0;padding:0;overflow:hidden;}</style>');
+    // 立即写入隐藏样式
+    document.write('<style>html,body{display:none !important;}</style>');
     
-    // 检查密码
     var password = prompt("请输入访问密码：");
-    
-    if (password === null) {
-      // 用户取消输入
-      document.body.innerHTML = "";
-      window.location.href = "about:blank";
-      return;
-    }
     
     if (password !== "zhuadabo") { // 这里修改为你想要的密码
       alert("密码错误，无法访问！");
-      // 立即清空并重定向
+      // 清空页面并跳转到空白页
       document.body.innerHTML = "";
-      document.documentElement.innerHTML = "";
-      window.location.replace("about:blank");
-      // 抛出错误阻止后续执行
-      throw new Error("访问被拒绝");
+      window.location.href = "about:blank";
+      // 阻止后续代码执行
+      throw new Error("密码错误，停止执行");
     } else {
-      // 密码正确，显示页面
-      document.documentElement.style.display = 'block';
-      document.documentElement.removeAttribute('style');
+      // 密码正确，写入显示样式
       document.write('<style>html,body{display:block !important;}</style>');
     }
   })();
@@ -40,18 +28,6 @@
     <title>期货行情图表</title>
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
-    <style>
-      /* 确保页面一开始完全隐藏 */
-      html, body {
-        display: none !important;
-        height: 100%;
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-      }
-      
-      /* 验证成功后才显示 - 由JS控制 */
-    </style>
 </head>
 
 <body>
