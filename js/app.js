@@ -3,27 +3,35 @@ const CONFIG = {
     dataPath: 'data/',
     charts: {},
     currentDates: [],
-    grid: { left: 85, right: 85, top: 50, bottom: 30 }
+    grid: { left: 85, right: 85, top: 50, bottom: 30 },
+    currentContractName: '',
+    klineVisibleSeries: ['K线', 'DKX', 'MADKX']
 };
 
 // 颜色配置（中国市场惯例：红涨绿跌）
 const COLORS = {
     up:       '#ef5350',
     down:     '#26a69a',
-    ma20:     '#FF6D00',
+    ma20:     '#2196F3',
+    ma5:      '#FFA726',
+    dkx:      '#FF6D00',
+    madkx:    '#9C27B0',
     volume:   '#78909c',
+    volMa10:  '#FFB74D',
+    volAmp:   '#FF0000',
     oi:       '#42a5f5',
     oiChange: '#FF6D00',
     homie:    '#9C27B0',
     inst:     '#ef5350',
     iv:       '#00BCD4',
     ivPct:    '#66bb6a',
+    ivUp:     '#FF0000',
     cb:       '#8d6e63',
     trend:    '#5C6BC0'
 };
 
 // ==================== 自定义合约顺序 ====================
-const CONTRACT_ORDER = [
+const Contract_ORDER = [
     '欧线EC','碳酸锂LC','氧化铝AO','三十年国债TL','生猪LH','烧碱SH',
     'LPGPG','苯乙烯EB','焦煤JM','豆一A','沥青BU','中证1000IM',
     '工业硅SI','多晶硅PS','白糖SR','尿素UR','玻璃FG','塑料L','硅铁SF',
@@ -80,9 +88,8 @@ async function initContractSelect() {
         const files = await resp.json();
         select.innerHTML = '';
 
-        // 按自定义顺序排序，不在列表中的排到最后
         const orderMap = {};
-        CONTRACT_ORDER.forEach((name, idx) => { orderMap[name] = idx; });
+        Contract_ORDER.forEach((name, idx) => { orderMap[name] = idx; });
 
         const sorted = [...files].sort((a, b) => {
             const ia = orderMap[a.display_name] !== undefined ? orderMap[a.display_name] : 9999;
@@ -206,6 +213,10 @@ async function loadChartData(filename) {
         CONFIG.rawData = rawData;
         updateDateRange(rawData);
 
+        const select = document.getElementById('contract-select');
+        const selectedOption = select.options[select.selectedIndex];
+        CONFIG.currentContractName = selectedOption ? selectedOption.textContent : '';
+
         const startDate = document.getElementById('start-date').value;
         const endDate   = document.getElementById('end-date').value;
         const filtered  = filterByDate(rawData, startDate, endDate);
@@ -243,9 +254,10 @@ function filterByDate(rawData, startDate, endDate) {
 function processChartData(rawData) {
     const dates = [], ohlc = [], volumes = [], oi = [], oiChange = [];
     const homieNet = [], instNet = [], iv = [], ivPct = [], cb = [], ma20 = [];
-    const trend = [];
+    const trend = [], ma5 = [], dkx = [], madkx = [], volMa10 = [];
+    const volAmplify = [], ivUpSignal = [];
 
-    rawData.forEach(row => {
+    rawData.forEach((row, idx) => {
         dates.push(toCatDate(getRawDate(row)));
 
         const open  = parseFloat(row['开盘价'] || row['open'])  || 0;
@@ -255,7 +267,17 @@ function processChartData(rawData) {
         ohlc.push([open, close, low, high]);
 
         ma20.push(parseFloat(row['ma20'] || row['MA20']) || null);
+        ma5.push(parseFloat(row['ma5'] || row['MA5']) || null);
+        dkx.push(parseFloat(row['DKX']) || null);
+        madkx.push(parseFloat(row['MADKX']) || null);
         volumes.push(parseFloat(row['成交量'] || row['volume'] || row['vol']) || 0);
+        volMa10.push(parseFloat(row['成交量MA10'] || row['vol_ma10']) || null);
+
+        const volAmpVal = parseFloat(row['成交量放大信号']);
+        if (!isNaN(volAmpVal) && volAmpVal !== 0) {
+            volAmplify.push([idx, volAmpVal]);
+        }
+
         oi.push(parseFloat(row['持仓量'] || row['oi']) || 0);
         oiChange.push((parseFloat(row['持仓量变幅']) || 0) * 100);
 
@@ -264,6 +286,11 @@ function processChartData(rawData) {
 
         iv.push(parseFloat(row['IV']) || null);
         ivPct.push((parseFloat(row['IV_pct']) || 0) * 100);
+
+        const ivUpVal = parseFloat(row['IV上涨信号']);
+        if (!isNaN(ivUpVal) && ivUpVal !== 0) {
+            ivUpSignal.push([idx, ivUpVal]);
+        }
 
         const cbVal = row['CB_index'];
         cb.push(cbVal != null && cbVal !== '' ? parseFloat(cbVal) : null);
@@ -277,7 +304,7 @@ function processChartData(rawData) {
         }
     });
 
-    return { dates, ohlc, volumes, oi, oiChange, homieNet, instNet, iv, ivPct, cb, ma20, trend };
+    return { dates, ohlc, volumes, volMa10, volAmplify, oi, oiChange, homieNet, instNet, iv, ivPct, ivUpSignal, cb, ma20, ma5, dkx, madkx, trend };
 }
 
 // ==================== 通用配置生成器 ====================
@@ -334,12 +361,22 @@ function makeSubTooltip(bodyFormatter) {
     };
 }
 
+function makeTitle(baseText) {
+    const name = CONFIG.currentContractName;
+    return name ? `${name}  ${baseText}` : baseText;
+}
+
 // ==================== 绘图函数 ====================
 
 function drawKlineChart(data) {
+    const legendSelected = {};
+    ['K线', 'DKX', 'MADKX', 'MA5', 'MA20'].forEach(s => {
+        legendSelected[s] = CONFIG.klineVisibleSeries.includes(s);
+    });
+
     CONFIG.charts.kline.setOption({
-        title:  { text: '价格走势', left: 'center', textStyle: { fontSize: 16 } },
-        legend: { data: ['K线', 'MA20'], top: 28 },
+        title:  { text: makeTitle('价格走势'), left: 'center', textStyle: { fontSize: 16 } },
+        legend: { data: ['K线', 'DKX', 'MADKX', 'MA5', 'MA20'], top: 28, selected: legendSelected },
         grid:   makeGrid(),
         xAxis:  makeXAxis(data.dates, true),
         yAxis: {
@@ -358,7 +395,10 @@ function drawKlineChart(data) {
             formatter(params) {
                 if (!params || !params.length) return '';
                 const k = params.find(p => p.seriesName === 'K线');
-                const m = params.find(p => p.seriesName === 'MA20');
+                const dkxP = params.find(p => p.seriesName === 'DKX');
+                const madkxP = params.find(p => p.seriesName === 'MADKX');
+                const m5 = params.find(p => p.seriesName === 'MA5');
+                const m20 = params.find(p => p.seriesName === 'MA20');
                 if (!k || !Array.isArray(k.value)) return '';
 
                 const dateStr = toDisplay(params[0].axisValue);
@@ -371,13 +411,14 @@ function drawKlineChart(data) {
                 const chg    = open > 0 ? ((close - open) / open * 100) : 0;
                 const chgStr = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
 
-                return `<div style="font-size:12px;line-height:2;min-width:170px">
+                return `<div style="font-size:12px;line-height:2;min-width:220px">
                     <div style="font-weight:700;border-bottom:1px solid #eee;padding-bottom:2px;margin-bottom:3px">${dateStr}</div>
                     <div>开&ensp;<b>${fmtPrice(open)}</b>&ensp;收&ensp;<b style="color:${clr}">${fmtPrice(close)}</b>&ensp;<span style="color:${clr};font-size:11px">${chgStr}</span></div>
                     <div>高&ensp;<b style="color:${COLORS.up}">${fmtPrice(high)}</b>&ensp;低&ensp;<b style="color:${COLORS.down}">${fmtPrice(low)}</b></div>
-                    ${m && m.value != null
-                        ? `<div>MA20&ensp;<b style="color:${COLORS.ma20}">${fmtPrice(m.value)}</b></div>`
-                        : ''}
+                    ${dkxP && dkxP.value != null ? `<div>DKX&ensp;<b style="color:${COLORS.dkx}">${fmtPrice(dkxP.value)}</b></div>` : ''}
+                    ${madkxP && madkxP.value != null ? `<div>MADKX&ensp;<b style="color:${COLORS.madkx}">${fmtPrice(madkxP.value)}</b></div>` : ''}
+                    ${m5 && m5.value != null ? `<div>MA5&ensp;<b style="color:${COLORS.ma5}">${fmtPrice(m5.value)}</b></div>` : ''}
+                    ${m20 && m20.value != null ? `<div>MA20&ensp;<b style="color:${COLORS.ma20}">${fmtPrice(m20.value)}</b></div>` : ''}
                 </div>`;
             }
         },
@@ -390,33 +431,81 @@ function drawKlineChart(data) {
                 }
             },
             {
+                name: 'DKX', type: 'line', data: data.dkx,
+                smooth: true, symbol: 'none', connectNulls: true,
+                lineStyle: { width: 2, color: COLORS.dkx }
+            },
+            {
+                name: 'MADKX', type: 'line', data: data.madkx,
+                smooth: true, symbol: 'none', connectNulls: true,
+                lineStyle: { width: 2, color: COLORS.madkx }
+            },
+            {
+                name: 'MA5', type: 'line', data: data.ma5,
+                smooth: true, symbol: 'none', connectNulls: true,
+                lineStyle: { width: 2, color: COLORS.ma5 }
+            },
+            {
                 name: 'MA20', type: 'line', data: data.ma20,
                 smooth: true, symbol: 'none', connectNulls: true,
                 lineStyle: { width: 2, color: COLORS.ma20 }
             }
         ]
     }, { notMerge: true });
+
+    CONFIG.charts.kline.off('legendselectchanged');
+    CONFIG.charts.kline.on('legendselectchanged', (params) => {
+        CONFIG.klineVisibleSeries = [];
+        Object.keys(params.selected).forEach(key => {
+            if (params.selected[key]) {
+                CONFIG.klineVisibleSeries.push(key);
+            }
+        });
+    });
 }
 
 function drawVolumeChart(data) {
     CONFIG.charts.volume.setOption({
-        title:    { text: '成交量', left: 'center', textStyle: { fontSize: 14 } },
+        title:    { text: makeTitle('成交量'), left: 'center', textStyle: { fontSize: 14 } },
+        legend:   { data: ['成交量', '成交量MA10', '成交量放大信号'], top: 25 },
         grid:     makeGrid(),
         xAxis:    makeXAxis(data.dates, false),
         yAxis:    { type: 'value', splitArea: { show: true }, axisLabel: { formatter: v => fmtNum(v), fontSize: 11 } },
         dataZoom: makeZoom(),
         tooltip:  makeSubTooltip((params) => {
-            const p = params[0];
-            if (!p) return '';
-            return `<span style="color:${COLORS.volume}">●</span>&nbsp;成交量&nbsp;<b>${fmtNum(p.value)}</b>`;
+            let html = '';
+            params.forEach(p => {
+                if (p.seriesName === '成交量') {
+                    html += `<span style="color:${COLORS.volume}">●</span>&nbsp;成交量&nbsp;<b>${fmtNum(p.value)}</b><br/>`;
+                } else if (p.seriesName === '成交量MA10') {
+                    if (p.value != null) {
+                        html += `<span style="color:${COLORS.volMa10}">●</span>&nbsp;成交量MA10&nbsp;<b>${fmtNum(p.value)}</b><br/>`;
+                    }
+                } else if (p.seriesName === '成交量放大信号' && p.value != null) {
+                    html += `<span style="color:${COLORS.volAmp}">★</span>&nbsp;成交量放大信号&nbsp;<b>${fmtNum(p.value[1])}</b><br/>`;
+                }
+            });
+            return html;
         }),
-        series: [{ name: '成交量', type: 'bar', data: data.volumes, itemStyle: { color: COLORS.volume }, barMaxWidth: 8 }]
+        series: [
+            { name: '成交量', type: 'bar', data: data.volumes, itemStyle: { color: COLORS.volume }, barMaxWidth: 8 },
+            {
+                name: '成交量MA10', type: 'line', data: data.volMa10,
+                smooth: true, symbol: 'none', connectNulls: true,
+                lineStyle: { width: 2, color: COLORS.volMa10 }
+            },
+            {
+                name: '成交量放大信号', type: 'scatter', data: data.volAmplify,
+                symbolSize: 18, symbol: 'star',
+                itemStyle: { color: COLORS.volAmp, shadowBlur: 6, shadowColor: 'rgba(255,0,0,0.5)' }
+            }
+        ]
     }, { notMerge: true });
 }
 
 function drawOIChart(data) {
     CONFIG.charts.oi.setOption({
-        title:  { text: '持仓量 & 变幅', left: 'center', textStyle: { fontSize: 14 } },
+        title:  { text: makeTitle('持仓量 & 变幅'), left: 'center', textStyle: { fontSize: 14 } },
         legend: { data: ['持仓量', '持仓量变幅'], top: 25 },
         grid:   makeGrid(),
         xAxis:  makeXAxis(data.dates, false),
@@ -451,7 +540,7 @@ function drawTrendChart(data) {
     if (!hasData || !CONFIG.charts.trend) return;
 
     CONFIG.charts.trend.setOption({
-        title:  { text: '趋势排名分位数', left: 'center', textStyle: { fontSize: 14 } },
+        title:  { text: makeTitle('趋势排名分位数'), left: 'center', textStyle: { fontSize: 14 } },
         grid:   makeGrid(),
         xAxis:  makeXAxis(data.dates, false),
         yAxis: {
@@ -495,7 +584,7 @@ function drawTrendChart(data) {
 
 function drawPositionChart(data) {
     CONFIG.charts.position.setOption({
-        title:  { text: '家人 & 机构净持仓', left: 'center', textStyle: { fontSize: 14 } },
+        title:  { text: makeTitle('家人 & 机构净持仓'), left: 'center', textStyle: { fontSize: 14 } },
         legend: {
             data: [
                 { name: '家人净持仓', itemStyle: { color: COLORS.homie }, lineStyle: { color: COLORS.homie } },
@@ -531,8 +620,8 @@ function drawPositionChart(data) {
 
 function drawIVChart(data) {
     CONFIG.charts.iv.setOption({
-        title:  { text: '隐含波动率 (IV)', left: 'center', textStyle: { fontSize: 14 } },
-        legend: { data: ['IV', 'IV60日分位数'], top: 25 },
+        title:  { text: makeTitle('隐含波动率 (IV)'), left: 'center', textStyle: { fontSize: 14 } },
+        legend: { data: ['IV', 'IV60日分位数', 'IV上涨信号'], top: 25 },
         grid:   makeGrid(),
         xAxis:  makeXAxis(data.dates, false),
         yAxis: [
@@ -541,23 +630,33 @@ function drawIVChart(data) {
         ],
         dataZoom: makeZoom(),
         tooltip: makeSubTooltip((params) => {
-            const ivP    = params.find(p => p.seriesName === 'IV');
-            const ivPctP = params.find(p => p.seriesName === 'IV60日分位数');
-            return [
-                ivP    ? `<span style="color:${COLORS.iv}">●</span>&nbsp;IV&nbsp;<b>${fmtPct1(ivP.value)}</b>` : '',
-                ivPctP ? `<span style="color:${COLORS.ivPct}">●</span>&nbsp;IV分位数&nbsp;<b>${fmtPct1(ivPctP.value)}</b>` : ''
-            ].filter(Boolean).join('<br/>');
+            let html = '';
+            params.forEach(p => {
+                if (p.seriesName === 'IV') {
+                    html += `<span style="color:${COLORS.iv}">●</span>&nbsp;IV&nbsp;<b>${fmtPct1(p.value)}</b><br/>`;
+                } else if (p.seriesName === 'IV60日分位数') {
+                    html += `<span style="color:${COLORS.ivPct}">●</span>&nbsp;IV分位数&nbsp;<b>${fmtPct1(p.value)}</b><br/>`;
+                } else if (p.seriesName === 'IV上涨信号' && p.value != null) {
+                    html += `<span style="color:${COLORS.ivUp}">★</span>&nbsp;IV上涨信号&nbsp;<b>${fmtPct1(p.value[1])}</b><br/>`;
+                }
+            });
+            return html;
         }),
         series: [
             { name: 'IV', type: 'line', data: data.iv, lineStyle: { color: COLORS.iv, width: 2 }, itemStyle: { color: COLORS.iv }, symbol: 'circle', symbolSize: 3, connectNulls: true },
-            { name: 'IV60日分位数', type: 'line', yAxisIndex: 1, data: data.ivPct, lineStyle: { color: COLORS.ivPct, width: 2, type: 'dashed' }, itemStyle: { color: COLORS.ivPct }, symbol: 'circle', symbolSize: 3 }
+            { name: 'IV60日分位数', type: 'line', yAxisIndex: 1, data: data.ivPct, lineStyle: { color: COLORS.ivPct, width: 2, type: 'dashed' }, itemStyle: { color: COLORS.ivPct }, symbol: 'circle', symbolSize: 3 },
+            {
+                name: 'IV上涨信号', type: 'scatter', yAxisIndex: 0, data: data.ivUpSignal,
+                symbolSize: 18, symbol: 'star',
+                itemStyle: { color: COLORS.ivUp, shadowBlur: 6, shadowColor: 'rgba(255,0,0,0.5)' }
+            }
         ]
     }, { notMerge: true });
 }
 
 function drawCBChart(data) {
     CONFIG.charts.cb.setOption({
-        title:    { text: '期限结构分数', left: 'center', textStyle: { fontSize: 14 } },
+        title:    { text: makeTitle('期限结构分数'), left: 'center', textStyle: { fontSize: 14 } },
         grid:     makeGrid(),
         xAxis:    makeXAxis(data.dates, false),
         yAxis:    { type: 'value', splitArea: { show: true }, axisLabel: { formatter: v => v.toFixed(2), fontSize: 11 } },
