@@ -310,7 +310,7 @@ function processChartData(rawData) {
 
         atrMA14.push(parseFloat(row['ATRMA14']) || null);
         atr60D60Pct.push(parseFloat(row['ATR60D60pct']) || null);
-        stopLossWidth.push(parseFloat(row['止损宽度']) || null);
+        stopLossWidth.push(parseFloat(row['推荐止损宽度']) || null);
     });
 
     return { dates, ohlc, volumes, volMa10, volAmplify, oi, oiChange, homieNet, instNet, iv, ivPct, ivUpSignal, cb, ma20, ma5, dkx, madkx, trend, atrMA14, atr60D60Pct, stopLossWidth };
@@ -545,7 +545,7 @@ function drawOIChart(data) {
 function drawATRChart(data) {
     CONFIG.charts.atr.setOption({
         title:  { text: makeTitle('ATR和止损'), left: 'center', textStyle: { fontSize: 14 } },
-        legend: { data: ['ATRMA14', 'ATR60D60pct', '止损宽度'], top: 25 },
+        legend: { data: ['ATRMA14', 'ATR60D60pct', '推荐止损宽度'], top: 25 },
         grid:   makeGrid(),
         xAxis:  makeXAxis(data.dates, false),
         yAxis:  { type: 'value', splitArea: { show: true }, axisLabel: { formatter: v => fmtPrice(v), fontSize: 11 } },
@@ -557,8 +557,8 @@ function drawATRChart(data) {
                     html += `<span style="color:${COLORS.atrMA14}">●</span>&nbsp;ATRMA14&nbsp;<b>${fmtPrice(p.value)}</b><br/>`;
                 } else if (p.seriesName === 'ATR60D60pct' && p.value != null) {
                     html += `<span style="color:${COLORS.atr60D60Pct}">●</span>&nbsp;ATR60D60pct&nbsp;<b>${fmtPrice(p.value)}</b><br/>`;
-                } else if (p.seriesName === '止损宽度' && p.value != null) {
-                    html += `<span style="color:${COLORS.stopLoss}">●</span>&nbsp;止损宽度&nbsp;<b>${fmtPrice(p.value)}</b><br/>`;
+                } else if (p.seriesName === '推荐止损宽度' && p.value != null) {
+                    html += `<span style="color:${COLORS.stopLoss}">●</span>&nbsp;推荐止损宽度&nbsp;<b>${fmtPrice(p.value)}</b><br/>`;
                 }
             });
             return html;
@@ -577,7 +577,7 @@ function drawATRChart(data) {
                 itemStyle: { color: COLORS.atr60D60Pct }
             },
             {
-                name: '止损宽度', type: 'line', data: data.stopLossWidth,
+                name: '推荐止损宽度', type: 'line', data: data.stopLossWidth,
                 smooth: true, symbol: 'none', connectNulls: true,
                 lineStyle: { width: 2, color: COLORS.stopLoss },
                 itemStyle: { color: COLORS.stopLoss }
