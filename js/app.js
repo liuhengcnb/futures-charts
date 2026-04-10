@@ -587,6 +587,18 @@ function fmtNum(num) {
     return Math.round(num).toString();
 }
 
+
+
+function updateDateRange(data) {
+    if (!data || !data.length) return;
+    const first = toFullDate(getRawDate(data[0]));
+    const last  = toFullDate(getRawDate(data[data.length - 1]));
+    const si = document.getElementById('start-date');
+    const ei = document.getElementById('end-date');
+    si.min = first; si.max = last;
+    ei.min = first; ei.max = last;
+}
+
 // ==================== 覆盖层辅助 ====================
 function showLoading() {
     const el = document.getElementById('loading-overlay');
