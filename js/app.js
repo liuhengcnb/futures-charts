@@ -1,5 +1,3 @@
-// js/app.js
-
 // ==================== 全局配置 ====================
 const CONFIG = {
     dataPath: 'data/',
@@ -24,33 +22,36 @@ const COLORS = {
     trend:    '#5C6BC0'
 };
 
-// ★ 自定义合约下拉顺序（按 display_name 排列）
+// ==================== 自定义合约顺序 ====================
 const CONTRACT_ORDER = [
     '欧线EC','碳酸锂LC','氧化铝AO','三十年国债TL','生猪LH','烧碱SH',
     'LPGPG','苯乙烯EB','焦煤JM','豆一A','沥青BU','中证1000IM',
-    '工业硅SI','白糖SR','尿素UR','玻璃FG','塑料L','硅铁SF','纸浆SP',
-    '纯碱SA','乙二醇EG','棉花CF','不锈钢SS','豆粕M','红枣CJ',
-    '二年国债TS','聚丙烯PP','20号胶NR','苹果AP','沪锡SN','橡胶RU',
-    '锰硅SM','螺纹钢RB','焦炭J','玉米C','沪铝AL','铁矿石I','原油SC',
-    '五年国债TF','甲醇MA','菜粕RM','十年国债T','PVCV','鸡蛋JD',
-    '棕榈油P','PTATA','豆油Y','沪银AG','沪铅PB','沪深300IF',
-    '菜油OI','沪金AU','沪铜CU','沪锌ZN','燃油FU','沪镍NI',
-    // 以上列表之外的品种兜底排在末尾
+    '工业硅SI','白糖SR','尿素UR','玻璃FG','塑料L','硅铁SF',
+    '纸浆SP','纯碱SA','乙二醇EG','棉花CF','不锈钢SS','豆粕M',
+    '红枣CJ','二年国债TS','聚丙烯PP','20号胶NR','苹果AP','沪锡SN',
+    '橡胶RU','锰硅SM','螺纹钢RB','焦炭J','玉米C','沪铝AL',
+    '铁矿石I','原油SC','五年国债TF','甲醇MA','菜粕RM','十年国债T',
+    'PVCV','鸡蛋JD','棕榈油P','PTATA','豆油Y','沪银AG','沪铅PB',
+    '沪深300IF','菜油OI','沪金AU','沪铜CU','沪锌ZN','燃油FU','沪镍NI'
 ];
 
 // ==================== 日期工具 ====================
+
 function toDigits8(raw) {
     if (!raw) return '';
     return String(raw).replace(/\s/g, '').replace(/[-\/]/g, '');
 }
+
 function toCatDate(raw) {
     const d = toDigits8(raw);
     if (d.length < 8) return d;
     return `${d.substr(2,2)}-${d.substr(4,2)}-${d.substr(6,2)}`;
 }
+
 function toDisplay(catVal) {
     return String(catVal || '').replace(/[-\/]/g, '').trim();
 }
+
 function toFullDate(raw) {
     const d = toDigits8(raw);
     if (d.length === 8)
@@ -77,18 +78,18 @@ async function initContractSelect() {
         const resp = await fetch(CONFIG.dataPath + 'manifest.json');
         if (!resp.ok) throw new Error('未找到 manifest.json');
         const files = await resp.json();
+        select.innerHTML = '';
 
-        // ★ 按 CONTRACT_ORDER 排序；列表里没有的品种追加到末尾（保持原顺序）
+        // 按自定义顺序排序，不在列表中的排到最后
         const orderMap = {};
-        CONTRACT_ORDER.forEach((name, i) => { orderMap[name] = i; });
+        CONTRACT_ORDER.forEach((name, idx) => { orderMap[name] = idx; });
 
         const sorted = [...files].sort((a, b) => {
-            const ia = orderMap[a.display_name] ?? CONTRACT_ORDER.length;
-            const ib = orderMap[b.display_name] ?? CONTRACT_ORDER.length;
+            const ia = orderMap[a.display_name] !== undefined ? orderMap[a.display_name] : 9999;
+            const ib = orderMap[b.display_name] !== undefined ? orderMap[b.display_name] : 9999;
             return ia - ib;
         });
 
-        select.innerHTML = '';
         sorted.forEach(f => {
             const opt = document.createElement('option');
             opt.value = f.filename;
@@ -184,6 +185,7 @@ function setupChartLinkage() {
 }
 
 // ==================== 数据加载 ====================
+
 function getRawDate(row) {
     for (const key of Object.keys(row)) {
         const k = key.replace(/^\uFEFF/, '').trim();
@@ -279,6 +281,7 @@ function processChartData(rawData) {
 }
 
 // ==================== 通用配置生成器 ====================
+
 function makeXAxis(dates, showLabel) {
     return {
         type: 'category',
@@ -287,17 +290,23 @@ function makeXAxis(dates, showLabel) {
         axisTick:  { alignWithLabel: true },
         axisLine:  { onZero: false },
         axisLabel: showLabel
-            ? { show: true, fontSize: 10, color: '#666',
+            ? {
+                show: true,
+                fontSize: 10,
+                color: '#666',
                 interval: Math.max(0, Math.floor(dates.length / 13) - 1),
-                formatter: v => toDisplay(v) }
+                formatter: v => toDisplay(v)
+            }
             : { show: false }
     };
 }
 
 function makeGrid(extraBottom) {
     return {
-        left: CONFIG.grid.left, right: CONFIG.grid.right,
-        top:  CONFIG.grid.top,  bottom: CONFIG.grid.bottom + (extraBottom || 0),
+        left:         CONFIG.grid.left,
+        right:        CONFIG.grid.right,
+        top:          CONFIG.grid.top,
+        bottom:       CONFIG.grid.bottom + (extraBottom || 0),
         containLabel: false
     };
 }
@@ -308,52 +317,83 @@ function makeZoom() {
 
 function makeSubTooltip(bodyFormatter) {
     return {
-        trigger: 'axis', confine: true, appendToBody: true,
-        axisPointer: { type: 'line', lineStyle: { color: 'rgba(80,80,80,0.45)', type: 'dashed', width: 1 } },
+        trigger:      'axis',
+        confine:      true,
+        appendToBody: true,
+        axisPointer: {
+            type:      'line',
+            lineStyle: { color: 'rgba(80,80,80,0.45)', type: 'dashed', width: 1 }
+        },
         formatter(params) {
             if (!params || !params.length) return '';
             const dateStr = toDisplay(params[0].axisValue);
             const header  = `<div style="font-weight:700;border-bottom:1px solid #eee;padding-bottom:2px;margin-bottom:3px">${dateStr}</div>`;
-            return `<div style="font-size:12px;line-height:2;min-width:130px">${header}${bodyFormatter(params)}</div>`;
+            const body    = bodyFormatter(params);
+            return `<div style="font-size:12px;line-height:2;min-width:130px">${header}${body}</div>`;
         }
     };
 }
 
 // ==================== 绘图函数 ====================
+
 function drawKlineChart(data) {
     CONFIG.charts.kline.setOption({
         title:  { text: '价格走势', left: 'center', textStyle: { fontSize: 16 } },
         legend: { data: ['K线', 'MA20'], top: 28 },
         grid:   makeGrid(),
         xAxis:  makeXAxis(data.dates, true),
-        yAxis:  { type: 'value', scale: true, splitArea: { show: true }, position: 'left', axisLabel: { fontSize: 11 } },
+        yAxis: {
+            type: 'value', scale: true, splitArea: { show: true }, position: 'left',
+            axisLabel: { fontSize: 11 }
+        },
         dataZoom: makeZoom(),
         tooltip: {
-            trigger: 'axis', confine: true, appendToBody: true,
-            axisPointer: { type: 'line', lineStyle: { color: 'rgba(80,80,80,0.45)', type: 'dashed', width: 1 } },
+            trigger:      'axis',
+            confine:      true,
+            appendToBody: true,
+            axisPointer: {
+                type:      'line',
+                lineStyle: { color: 'rgba(80,80,80,0.45)', type: 'dashed', width: 1 }
+            },
             formatter(params) {
                 if (!params || !params.length) return '';
                 const k = params.find(p => p.seriesName === 'K线');
                 const m = params.find(p => p.seriesName === 'MA20');
                 if (!k || !Array.isArray(k.value)) return '';
+
                 const dateStr = toDisplay(params[0].axisValue);
-                const open = k.value[0], close = k.value[1], low = k.value[2], high = k.value[3];
-                const clr = close >= open ? COLORS.up : COLORS.down;
-                const chg = open > 0 ? ((close - open) / open * 100) : 0;
+                const open  = k.value[0];
+                const close = k.value[1];
+                const low   = k.value[2];
+                const high  = k.value[3];
+
+                const clr    = close >= open ? COLORS.up : COLORS.down;
+                const chg    = open > 0 ? ((close - open) / open * 100) : 0;
                 const chgStr = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
+
                 return `<div style="font-size:12px;line-height:2;min-width:170px">
                     <div style="font-weight:700;border-bottom:1px solid #eee;padding-bottom:2px;margin-bottom:3px">${dateStr}</div>
                     <div>开&ensp;<b>${fmtPrice(open)}</b>&ensp;收&ensp;<b style="color:${clr}">${fmtPrice(close)}</b>&ensp;<span style="color:${clr};font-size:11px">${chgStr}</span></div>
                     <div>高&ensp;<b style="color:${COLORS.up}">${fmtPrice(high)}</b>&ensp;低&ensp;<b style="color:${COLORS.down}">${fmtPrice(low)}</b></div>
-                    ${m && m.value != null ? `<div>MA20&ensp;<b style="color:${COLORS.ma20}">${fmtPrice(m.value)}</b></div>` : ''}
+                    ${m && m.value != null
+                        ? `<div>MA20&ensp;<b style="color:${COLORS.ma20}">${fmtPrice(m.value)}</b></div>`
+                        : ''}
                 </div>`;
             }
         },
         series: [
-            { name: 'K线', type: 'candlestick', data: data.ohlc,
-              itemStyle: { color: COLORS.up, color0: COLORS.down, borderColor: COLORS.up, borderColor0: COLORS.down } },
-            { name: 'MA20', type: 'line', data: data.ma20, smooth: true, symbol: 'none', connectNulls: true,
-              lineStyle: { width: 2, color: COLORS.ma20 } }
+            {
+                name: 'K线', type: 'candlestick', data: data.ohlc,
+                itemStyle: {
+                    color: COLORS.up, color0: COLORS.down,
+                    borderColor: COLORS.up, borderColor0: COLORS.down
+                }
+            },
+            {
+                name: 'MA20', type: 'line', data: data.ma20,
+                smooth: true, symbol: 'none', connectNulls: true,
+                lineStyle: { width: 2, color: COLORS.ma20 }
+            }
         ]
     }, { notMerge: true });
 }
@@ -365,9 +405,10 @@ function drawVolumeChart(data) {
         xAxis:    makeXAxis(data.dates, false),
         yAxis:    { type: 'value', splitArea: { show: true }, axisLabel: { formatter: v => fmtNum(v), fontSize: 11 } },
         dataZoom: makeZoom(),
-        tooltip:  makeSubTooltip(params => {
+        tooltip:  makeSubTooltip((params) => {
             const p = params[0];
-            return p ? `<span style="color:${COLORS.volume}">●</span>&nbsp;成交量&nbsp;<b>${fmtNum(p.value)}</b>` : '';
+            if (!p) return '';
+            return `<span style="color:${COLORS.volume}">●</span>&nbsp;成交量&nbsp;<b>${fmtNum(p.value)}</b>`;
         }),
         series: [{ name: '成交量', type: 'bar', data: data.volumes, itemStyle: { color: COLORS.volume }, barMaxWidth: 8 }]
     }, { notMerge: true });
@@ -384,7 +425,7 @@ function drawOIChart(data) {
             { type: 'value', name: '变幅(%)', position: 'right', splitLine: { show: false }, axisLabel: { formatter: v => v.toFixed(1) + '%', fontSize: 11 } }
         ],
         dataZoom: makeZoom(),
-        tooltip: makeSubTooltip(params => {
+        tooltip: makeSubTooltip((params) => {
             const oiP = params.find(p => p.seriesName === '持仓量');
             const chP = params.find(p => p.seriesName === '持仓量变幅');
             return [
@@ -394,9 +435,11 @@ function drawOIChart(data) {
         }),
         series: [
             { name: '持仓量', type: 'bar', data: data.oi, itemStyle: { color: COLORS.oi }, barMaxWidth: 8 },
-            { name: '持仓量变幅', type: 'line', yAxisIndex: 1, data: data.oiChange,
-              lineStyle: { color: COLORS.oiChange, width: 2 }, symbol: 'circle', symbolSize: 3,
-              markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0 }], lineStyle: { color: '#ef5350', type: 'dashed', width: 1.5 } } }
+            {
+                name: '持仓量变幅', type: 'line', yAxisIndex: 1, data: data.oiChange,
+                lineStyle: { color: COLORS.oiChange, width: 2 }, symbol: 'circle', symbolSize: 3,
+                markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0 }], lineStyle: { color: '#ef5350', type: 'dashed', width: 1.5 } }
+            }
         ]
     }, { notMerge: true });
 }
@@ -412,30 +455,41 @@ function drawTrendChart(data) {
         grid:   makeGrid(),
         xAxis:  makeXAxis(data.dates, false),
         yAxis: {
-            type: 'value', min: 0, max: 100, splitArea: { show: true },
-            axisLabel: { formatter: v => v.toFixed(0) + '%', fontSize: 11 }
+            type: 'value',
+            min: 0,
+            max: 100,
+            splitArea: { show: true },
+            axisLabel: { formatter: v => v.toFixed(0) + '%', fontSize: 11 },
+            splitLine: { show: true }
         },
         dataZoom: makeZoom(),
-        tooltip: makeSubTooltip(params => {
+        tooltip: makeSubTooltip((params) => {
             const p = params[0];
-            return (p && p.value != null)
-                ? `<span style="color:${COLORS.trend}">●</span>&nbsp;趋势排名分位数&nbsp;<b>${fmtPct1(p.value)}</b>`
-                : '';
+            if (!p || p.value == null) return '';
+            return `<span style="color:${COLORS.trend}">●</span>&nbsp;趋势排名分位数&nbsp;<b>${fmtPct1(p.value)}</b>`;
         }),
         series: [{
-            name: '趋势排名分位数', type: 'line', data: data.trend, connectNulls: false,
-            lineStyle: { color: COLORS.trend, width: 2 }, itemStyle: { color: COLORS.trend },
-            symbol: 'circle', symbolSize: 10,
+            name: '趋势排名分位数',
+            type: 'line',
+            data: data.trend,
+            connectNulls: true,
+            lineStyle: { color: COLORS.trend, width: 2 },
+            itemStyle: { color: COLORS.trend },
+            symbol:     'circle',
+            symbolSize: 10,
             markLine: {
-                silent: true, symbol: 'none',
-                label: { show: true, position: 'insideEndTop', fontSize: 10 },
+                silent:   true,
+                symbol:   'none',
+                label:    { show: true, position: 'insideEndTop', fontSize: 10 },
+                lineStyle: { type: 'dashed', width: 1 },
                 data: [
-                    { yAxis: 80, name: '80%', lineStyle: { color: COLORS.up,   type: 'dashed', width: 1 } },
-                    { yAxis: 20, name: '20%', lineStyle: { color: COLORS.down, type: 'dashed', width: 1 } }
+                    { yAxis: 80, name: '80%', lineStyle: { color: COLORS.up   } },
+                    { yAxis: 20, name: '20%', lineStyle: { color: COLORS.down } }
                 ]
             }
         }]
     }, { notMerge: true });
+
     CONFIG.charts.trend.resize();
 }
 
@@ -446,13 +500,14 @@ function drawPositionChart(data) {
             data: [
                 { name: '家人净持仓', itemStyle: { color: COLORS.homie }, lineStyle: { color: COLORS.homie } },
                 { name: '机构净持仓', itemStyle: { color: COLORS.inst  }, lineStyle: { color: COLORS.inst  } }
-            ], top: 25
+            ],
+            top: 25
         },
         grid:   makeGrid(),
         xAxis:  makeXAxis(data.dates, false),
         yAxis:  { type: 'value', splitArea: { show: true }, axisLabel: { formatter: v => fmtNum(v), fontSize: 11 } },
         dataZoom: makeZoom(),
-        tooltip: makeSubTooltip(params => {
+        tooltip: makeSubTooltip((params) => {
             const h = params.find(p => p.seriesName === '家人净持仓');
             const i = params.find(p => p.seriesName === '机构净持仓');
             return [
@@ -461,11 +516,15 @@ function drawPositionChart(data) {
             ].filter(Boolean).join('<br/>');
         }),
         series: [
-            { name: '家人净持仓', type: 'line', data: data.homieNet,
-              lineStyle: { color: COLORS.homie, width: 2 }, itemStyle: { color: COLORS.homie }, symbol: 'circle', symbolSize: 3,
-              markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0 }], lineStyle: { color: '#333', type: 'dashed', width: 1.5 } } },
-            { name: '机构净持仓', type: 'line', data: data.instNet,
-              lineStyle: { color: COLORS.inst, width: 2 }, itemStyle: { color: COLORS.inst }, symbol: 'circle', symbolSize: 3 }
+            {
+                name: '家人净持仓', type: 'line', data: data.homieNet,
+                lineStyle: { color: COLORS.homie, width: 2 }, itemStyle: { color: COLORS.homie }, symbol: 'circle', symbolSize: 3,
+                markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0 }], lineStyle: { color: '#333', type: 'dashed', width: 1.5 } }
+            },
+            {
+                name: '机构净持仓', type: 'line', data: data.instNet,
+                lineStyle: { color: COLORS.inst, width: 2 }, itemStyle: { color: COLORS.inst }, symbol: 'circle', symbolSize: 3
+            }
         ]
     }, { notMerge: true });
 }
@@ -481,7 +540,7 @@ function drawIVChart(data) {
             { type: 'value', name: '分位数(%)', position: 'right', min: 0, max: 100, splitLine: { show: false }, axisLabel: { formatter: v => v.toFixed(1) + '%', fontSize: 11 } }
         ],
         dataZoom: makeZoom(),
-        tooltip: makeSubTooltip(params => {
+        tooltip: makeSubTooltip((params) => {
             const ivP    = params.find(p => p.seriesName === 'IV');
             const ivPctP = params.find(p => p.seriesName === 'IV60日分位数');
             return [
@@ -491,8 +550,7 @@ function drawIVChart(data) {
         }),
         series: [
             { name: 'IV', type: 'line', data: data.iv, lineStyle: { color: COLORS.iv, width: 2 }, itemStyle: { color: COLORS.iv }, symbol: 'circle', symbolSize: 3, connectNulls: true },
-            { name: 'IV60日分位数', type: 'line', yAxisIndex: 1, data: data.ivPct,
-              lineStyle: { color: COLORS.ivPct, width: 2, type: 'dashed' }, itemStyle: { color: COLORS.ivPct }, symbol: 'circle', symbolSize: 3 }
+            { name: 'IV60日分位数', type: 'line', yAxisIndex: 1, data: data.ivPct, lineStyle: { color: COLORS.ivPct, width: 2, type: 'dashed' }, itemStyle: { color: COLORS.ivPct }, symbol: 'circle', symbolSize: 3 }
         ]
     }, { notMerge: true });
 }
@@ -504,9 +562,10 @@ function drawCBChart(data) {
         xAxis:    makeXAxis(data.dates, false),
         yAxis:    { type: 'value', splitArea: { show: true }, axisLabel: { formatter: v => v.toFixed(2), fontSize: 11 } },
         dataZoom: makeZoom(),
-        tooltip:  makeSubTooltip(params => {
+        tooltip:  makeSubTooltip((params) => {
             const p = params[0];
-            return p ? `<span style="color:${COLORS.cb}">●</span>&nbsp;期限结构分数&nbsp;<b>${fmtCB(p.value)}</b>` : '';
+            if (!p) return '';
+            return `<span style="color:${COLORS.cb}">●</span>&nbsp;期限结构分数&nbsp;<b>${fmtCB(p.value)}</b>`;
         }),
         series: [{
             name: '期限结构', type: 'line', data: data.cb,
@@ -526,17 +585,6 @@ function fmtNum(num) {
     if (abs >= 1e8) return (num / 1e8).toFixed(2) + '亿';
     if (abs >= 1e4) return (num / 1e4).toFixed(2) + '万';
     return Math.round(num).toString();
-}
-function formatNumber(num) { return fmtNum(num); }
-
-function updateDateRange(data) {
-    if (!data || !data.length) return;
-    const first = toFullDate(getRawDate(data[0]));
-    const last  = toFullDate(getRawDate(data[data.length - 1]));
-    const si = document.getElementById('start-date');
-    const ei = document.getElementById('end-date');
-    si.min = first; si.max = last;
-    ei.min = first; ei.max = last;
 }
 
 // ==================== 覆盖层辅助 ====================
