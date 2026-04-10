@@ -496,7 +496,7 @@ function drawVolumeChart(data) {
             },
             {
                 name: '成交量放大信号', type: 'scatter', data: data.volAmplify,
-                symbolSize: 18, symbol: 'star',
+                symbolSize: 10, symbol: 'circle',
                 itemStyle: { color: COLORS.volAmp, shadowBlur: 6, shadowColor: 'rgba(255,0,0,0.5)' }
             }
         ]
@@ -647,7 +647,7 @@ function drawIVChart(data) {
             { name: 'IV60日分位数', type: 'line', yAxisIndex: 1, data: data.ivPct, lineStyle: { color: COLORS.ivPct, width: 2, type: 'dashed' }, itemStyle: { color: COLORS.ivPct }, symbol: 'circle', symbolSize: 3 },
             {
                 name: 'IV上涨信号', type: 'scatter', yAxisIndex: 0, data: data.ivUpSignal,
-                symbolSize: 18, symbol: 'star',
+                symbolSize: 10, symbol: 'circle',
                 itemStyle: { color: COLORS.ivUp, shadowBlur: 6, shadowColor: 'rgba(255,0,0,0.5)' }
             }
         ]
