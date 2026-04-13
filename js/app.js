@@ -1,7 +1,7 @@
 // ==================== 全局配置 ====================
 const CONFIG = {
     dataPath:            'data/',
-    seatDataPath:        'data/seats/',
+    seatDataPath:        'data/席位数据/',
     charts:              {},
     currentDates:        [],
     grid:                { left: 85, right: 85, top: 50, bottom: 30 },
