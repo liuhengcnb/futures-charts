@@ -10,24 +10,26 @@ const CONFIG = {
 
 // 颜色配置（中国市场惯例：红涨绿跌）
 const COLORS = {
-    up:       '#ef5350',
-    down:     '#26a69a',
-    ma20:     '#2196F3',
-    ma5:      '#FFA726',
-    dkx:      '#FF6D00',
-    madkx:    '#9C27B0',
-    volume:   '#78909c',
-    volMa10:  '#FFB74D',
-    volAmp:   '#FF0000',
-    oi:       '#42a5f5',
-    oiChange: '#FF6D00',
-    homie:    '#9C27B0',
-    inst:     '#ef5350',
-    iv:       '#00BCD4',
-    ivPct:    '#66bb6a',
-    ivUp:     '#FF0000',
-    cb:       '#8d6e63',
-    trend:    '#5C6BC0',
+    up:          '#ef5350',
+    down:        '#26a69a',
+    ma20:        '#2196F3',
+    ma5:         '#FFA726',
+    dkx:         '#FF6D00',
+    madkx:       '#9C27B0',
+    volume:      '#78909c',
+    volMa10:     '#FFB74D',
+    volAmp:      '#FF0000',
+    oi:          '#42a5f5',
+    oiChange:    '#FF6D00',
+    homie:       '#9C27B0',
+    inst:        '#ef5350',
+    iv:          '#00BCD4',
+    ivPct:       '#66bb6a',
+    ivUp:        '#FF0000',
+    cb:          '#8d6e63',
+    cbHistPct:   '#26C6DA',   // CB_index历史分位数（右轴）
+    trend:       '#5C6BC0',   // 趋势横截面分位数
+    trendHist:   '#43A047',   // 趋势历史分位数（新增）
     atrMA14:     '#FF5722',
     atr60D60Pct: '#00BCD4',
     stopLoss:    '#E91E63'
@@ -255,10 +257,19 @@ function filterByDate(rawData, startDate, endDate) {
     });
 }
 
+// 将原始分位数值统一转换为 0-100 的百分比数值
+function parsePctField(val) {
+    if (val == null || val === '') return null;
+    const v = parseFloat(val);
+    if (isNaN(v)) return null;
+    // 若值在 0~1 之间（小数形式），乘以 100 转为百分比
+    return Math.abs(v) <= 1 ? v * 100 : v;
+}
+
 function processChartData(rawData) {
     const dates = [], ohlc = [], volumes = [], oi = [], oiChange = [];
-    const homieNet = [], instNet = [], iv = [], ivPct = [], cb = [], ma20 = [];
-    const trend = [], ma5 = [], dkx = [], madkx = [], volMa10 = [];
+    const homieNet = [], instNet = [], iv = [], ivPct = [], cb = [], cbHistPct = [], ma20 = [];
+    const trendCS = [], trendHist = [], ma5 = [], dkx = [], madkx = [], volMa10 = [];
     const volAmplify = [], ivUpSignal = [];
     const atrMA14 = [], atr60D60Pct = [], stopLossWidth = [];
 
@@ -272,8 +283,8 @@ function processChartData(rawData) {
         ohlc.push([open, close, low, high]);
 
         ma20.push(parseFloat(row['ma20'] || row['MA20']) || null);
-        ma5.push(parseFloat(row['ma5'] || row['MA5']) || null);
-        dkx.push(parseFloat(row['DKX']) || null);
+        ma5.push(parseFloat(row['ma5']  || row['MA5'])  || null);
+        dkx.push(parseFloat(row['DKX'])   || null);
         madkx.push(parseFloat(row['MADKX']) || null);
         volumes.push(parseFloat(row['成交量'] || row['volume'] || row['vol']) || 0);
         volMa10.push(parseFloat(row['成交量MA10'] || row['vol_ma10']) || null);
@@ -300,20 +311,32 @@ function processChartData(rawData) {
         const cbVal = row['CB_index'];
         cb.push(cbVal != null && cbVal !== '' ? parseFloat(cbVal) : null);
 
-        const tVal = row['趋势排名分位数'];
-        if (tVal != null && tVal !== '') {
-            const tv = parseFloat(tVal);
-            trend.push(Math.abs(tv) <= 1 ? tv * 100 : tv);
-        } else {
-            trend.push(null);
-        }
+        // ── CB_index 历史分位数（新增）──
+        cbHistPct.push(parsePctField(row['CB_index历史分位数']));
+
+        // ── 趋势横截面分位数（替换原趋势排名分位数）──
+        // 优先读新列名，fallback 兼容旧列名
+        const csRaw = row['趋势横截面分位数'] != null ? row['趋势横截面分位数'] : row['趋势排名分位数'];
+        trendCS.push(parsePctField(csRaw));
+
+        // ── 趋势历史分位数（新增）──
+        trendHist.push(parsePctField(row['趋势历史分位数']));
 
         atrMA14.push(parseFloat(row['ATRMA14']) || null);
         atr60D60Pct.push(parseFloat(row['ATR60D60pct']) || null);
         stopLossWidth.push(parseFloat(row['推荐止损宽度']) || null);
     });
 
-    return { dates, ohlc, volumes, volMa10, volAmplify, oi, oiChange, homieNet, instNet, iv, ivPct, ivUpSignal, cb, ma20, ma5, dkx, madkx, trend, atrMA14, atr60D60Pct, stopLossWidth };
+    return {
+        dates, ohlc, volumes, volMa10, volAmplify,
+        oi, oiChange,
+        homieNet, instNet,
+        iv, ivPct, ivUpSignal,
+        cb, cbHistPct,
+        ma20, ma5, dkx, madkx,
+        trendCS, trendHist,
+        atrMA14, atr60D60Pct, stopLossWidth
+    };
 }
 
 // ==================== 通用配置生成器 ====================
@@ -403,11 +426,11 @@ function drawKlineChart(data) {
             },
             formatter(params) {
                 if (!params || !params.length) return '';
-                const k = params.find(p => p.seriesName === 'K线');
-                const dkxP = params.find(p => p.seriesName === 'DKX');
+                const k     = params.find(p => p.seriesName === 'K线');
+                const dkxP  = params.find(p => p.seriesName === 'DKX');
                 const madkxP = params.find(p => p.seriesName === 'MADKX');
-                const m5 = params.find(p => p.seriesName === 'MA5');
-                const m20 = params.find(p => p.seriesName === 'MA20');
+                const m5    = params.find(p => p.seriesName === 'MA5');
+                const m20   = params.find(p => p.seriesName === 'MA20');
                 if (!k || !Array.isArray(k.value)) return '';
 
                 const dateStr = toDisplay(params[0].axisValue);
@@ -415,18 +438,17 @@ function drawKlineChart(data) {
                 const close = k.value[1];
                 const low   = k.value[2];
                 const high  = k.value[3];
-
-                const clr    = close >= open ? COLORS.up : COLORS.down;
-                const chg    = open > 0 ? ((close - open) / open * 100) : 0;
+                const clr   = close >= open ? COLORS.up : COLORS.down;
+                const chg   = open > 0 ? ((close - open) / open * 100) : 0;
                 const chgStr = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
 
                 return `<div style="font-size:12px;line-height:2;min-width:220px">
                     <div style="font-weight:700;border-bottom:1px solid #eee;padding-bottom:2px;margin-bottom:3px">${dateStr}</div>
                     <div>开&ensp;<b>${fmtPrice(open)}</b>&ensp;收&ensp;<b style="color:${clr}">${fmtPrice(close)}</b>&ensp;<span style="color:${clr};font-size:11px">${chgStr}</span></div>
                     <div>高&ensp;<b style="color:${COLORS.up}">${fmtPrice(high)}</b>&ensp;低&ensp;<b style="color:${COLORS.down}">${fmtPrice(low)}</b></div>
-                    ${dkxP && dkxP.value != null ? `<div>DKX&ensp;<b style="color:${COLORS.dkx}">${fmtPrice(dkxP.value)}</b></div>` : ''}
+                    ${dkxP  && dkxP.value  != null ? `<div>DKX&ensp;<b style="color:${COLORS.dkx}">${fmtPrice(dkxP.value)}</b></div>` : ''}
                     ${madkxP && madkxP.value != null ? `<div>MADKX&ensp;<b style="color:${COLORS.madkx}">${fmtPrice(madkxP.value)}</b></div>` : ''}
-                    ${m5 && m5.value != null ? `<div>MA5&ensp;<b style="color:${COLORS.ma5}">${fmtPrice(m5.value)}</b></div>` : ''}
+                    ${m5  && m5.value  != null ? `<div>MA5&ensp;<b style="color:${COLORS.ma5}">${fmtPrice(m5.value)}</b></div>` : ''}
                     ${m20 && m20.value != null ? `<div>MA20&ensp;<b style="color:${COLORS.ma20}">${fmtPrice(m20.value)}</b></div>` : ''}
                 </div>`;
             }
@@ -466,9 +488,7 @@ function drawKlineChart(data) {
     CONFIG.charts.kline.on('legendselectchanged', (params) => {
         CONFIG.klineVisibleSeries = [];
         Object.keys(params.selected).forEach(key => {
-            if (params.selected[key]) {
-                CONFIG.klineVisibleSeries.push(key);
-            }
+            if (params.selected[key]) CONFIG.klineVisibleSeries.push(key);
         });
     });
 }
@@ -486,10 +506,8 @@ function drawVolumeChart(data) {
             params.forEach(p => {
                 if (p.seriesName === '成交量') {
                     html += `<span style="color:${COLORS.volume}">●</span>&nbsp;成交量&nbsp;<b>${fmtNum(p.value)}</b><br/>`;
-                } else if (p.seriesName === '成交量MA10') {
-                    if (p.value != null) {
-                        html += `<span style="color:${COLORS.volMa10}">●</span>&nbsp;成交量MA10&nbsp;<b>${fmtNum(p.value)}</b><br/>`;
-                    }
+                } else if (p.seriesName === '成交量MA10' && p.value != null) {
+                    html += `<span style="color:${COLORS.volMa10}">●</span>&nbsp;成交量MA10&nbsp;<b>${fmtNum(p.value)}</b><br/>`;
                 } else if (p.seriesName === '成交量放大信号' && p.value != null) {
                     html += `<span style="color:${COLORS.volAmp}">★</span>&nbsp;成交量放大信号&nbsp;<b>${fmtNum(p.value[1])}</b><br/>`;
                 }
@@ -586,50 +604,92 @@ function drawATRChart(data) {
     }, { notMerge: true });
 }
 
+// ==================== 趋势性排名分位数图（核心修订）====================
 function drawTrendChart(data) {
-    const hasData = data.trend.some(v => v !== null && !isNaN(v));
+    // 只要横截面或历史分位数任一有值就显示
+    const hasCS   = data.trendCS.some(v => v !== null && !isNaN(v));
+    const hasHist = data.trendHist.some(v => v !== null && !isNaN(v));
+    const hasData = hasCS || hasHist;
+
     const el = document.getElementById('chart-trend');
     if (el) el.style.display = hasData ? '' : 'none';
     if (!hasData || !CONFIG.charts.trend) return;
 
+    // 参考基准线配置（80% / 20%）
+    const markLines = {
+        silent:    true,
+        symbol:    'none',
+        label:     { show: true, position: 'insideEndTop', fontSize: 10 },
+        lineStyle: { type: 'dashed', width: 1 },
+        data: [
+            { yAxis: 80, name: '80%', lineStyle: { color: COLORS.up   } },
+            { yAxis: 20, name: '20%', lineStyle: { color: COLORS.down } }
+        ]
+    };
+
+    const legendData = [];
+    if (hasCS)   legendData.push({ name: '趋势横截面分位数', itemStyle: { color: COLORS.trend     }, lineStyle: { color: COLORS.trend     } });
+    if (hasHist) legendData.push({ name: '趋势历史分位数',   itemStyle: { color: COLORS.trendHist }, lineStyle: { color: COLORS.trendHist } });
+
+    const series = [];
+    if (hasCS) {
+        series.push({
+            name:        '趋势横截面分位数',
+            type:        'line',
+            data:        data.trendCS,
+            connectNulls: true,
+            lineStyle:   { color: COLORS.trend, width: 2 },
+            itemStyle:   { color: COLORS.trend },
+            symbol:      'circle',
+            symbolSize:  6,
+            markLine:    markLines
+        });
+    }
+    if (hasHist) {
+        series.push({
+            name:        '趋势历史分位数',
+            type:        'line',
+            data:        data.trendHist,
+            connectNulls: true,
+            lineStyle:   { color: COLORS.trendHist, width: 2, type: 'dashed' },
+            itemStyle:   { color: COLORS.trendHist },
+            symbol:      'circle',
+            symbolSize:  6,
+            // markLine 只在第一条上显示，避免重复
+            ...(!hasCS ? { markLine: markLines } : {})
+        });
+    }
+
     CONFIG.charts.trend.setOption({
-        title:  { text: makeTitle('趋势排名分位数'), left: 'center', textStyle: { fontSize: 14 } },
+        title: { text: makeTitle('趋势性排名分位数'), left: 'center', textStyle: { fontSize: 14 } },
+        legend: {
+            data: legendData,
+            top:  25,
+            textStyle: { fontSize: 11 }
+        },
         grid:   makeGrid(),
         xAxis:  makeXAxis(data.dates, false),
         yAxis: {
             type: 'value',
-            min: 0,
-            max: 100,
+            min:  0,
+            max:  100,
             splitArea: { show: true },
             axisLabel: { formatter: v => v.toFixed(0) + '%', fontSize: 11 },
             splitLine: { show: true }
         },
         dataZoom: makeZoom(),
         tooltip: makeSubTooltip((params) => {
-            const p = params[0];
-            if (!p || p.value == null) return '';
-            return `<span style="color:${COLORS.trend}">●</span>&nbsp;趋势排名分位数&nbsp;<b>${fmtPct1(p.value)}</b>`;
+            let html = '';
+            params.forEach(p => {
+                if (p.seriesName === '趋势横截面分位数' && p.value != null) {
+                    html += `<span style="color:${COLORS.trend}">●</span>&nbsp;横截面分位数&nbsp;<b>${fmtPct1(p.value)}</b><br/>`;
+                } else if (p.seriesName === '趋势历史分位数' && p.value != null) {
+                    html += `<span style="color:${COLORS.trendHist}">●</span>&nbsp;历史分位数&nbsp;<b>${fmtPct1(p.value)}</b><br/>`;
+                }
+            });
+            return html || '';
         }),
-        series: [{
-            name: '趋势排名分位数',
-            type: 'line',
-            data: data.trend,
-            connectNulls: true,
-            lineStyle: { color: COLORS.trend, width: 2 },
-            itemStyle: { color: COLORS.trend },
-            symbol:     'circle',
-            symbolSize: 10,
-            markLine: {
-                silent:   true,
-                symbol:   'none',
-                label:    { show: true, position: 'insideEndTop', fontSize: 10 },
-                lineStyle: { type: 'dashed', width: 1 },
-                data: [
-                    { yAxis: 80, name: '80%', lineStyle: { color: COLORS.up   } },
-                    { yAxis: 20, name: '20%', lineStyle: { color: COLORS.down } }
-                ]
-            }
-        }]
+        series
     }, { notMerge: true });
 
     CONFIG.charts.trend.resize();
@@ -707,23 +767,100 @@ function drawIVChart(data) {
     }, { notMerge: true });
 }
 
+// ==================== 期限结构图（新增历史分位数，双轴）====================
 function drawCBChart(data) {
+    const hasCBHist = data.cbHistPct.some(v => v !== null && !isNaN(v));
+
+    // 左轴：期限结构分数；右轴：历史分位数（0-100%）
+    const yAxes = [
+        {
+            type: 'value',
+            name: '结构分数',
+            position: 'left',
+            splitArea: { show: true },
+            axisLabel: { formatter: v => v.toFixed(2), fontSize: 11 }
+        }
+    ];
+    if (hasCBHist) {
+        yAxes.push({
+            type: 'value',
+            name: '分位数(%)',
+            position: 'right',
+            min: 0,
+            max: 100,
+            splitLine: { show: false },
+            axisLabel: { formatter: v => v.toFixed(0) + '%', fontSize: 11 }
+        });
+    }
+
+    const legendData = ['期限结构分数'];
+    if (hasCBHist) legendData.push('历史分位数');
+
+    const series = [
+        {
+            name: '期限结构分数',
+            type: 'line',
+            yAxisIndex: 0,
+            data: data.cb,
+            lineStyle: { color: COLORS.cb, width: 2 },
+            itemStyle: { color: COLORS.cb },
+            symbol:     'circle',
+            symbolSize: 3,
+            connectNulls: true,
+            markLine: {
+                silent: true, symbol: 'none',
+                data: [{ yAxis: 0 }],
+                lineStyle: { color: '#999', type: 'dashed', width: 1.5 }
+            }
+        }
+    ];
+
+    if (hasCBHist) {
+        series.push({
+            name: '历史分位数',
+            type: 'line',
+            yAxisIndex: 1,
+            data: data.cbHistPct,
+            lineStyle: { color: COLORS.cbHistPct, width: 2, type: 'dashed' },
+            itemStyle: { color: COLORS.cbHistPct },
+            symbol:    'circle',
+            symbolSize: 3,
+            connectNulls: true,
+            markLine: {
+                silent: true, symbol: 'none',
+                label:  { show: true, position: 'insideEndTop', fontSize: 10 },
+                lineStyle: { type: 'dashed', width: 1 },
+                data: [
+                    { yAxis: 80, name: '80%', lineStyle: { color: COLORS.up   } },
+                    { yAxis: 20, name: '20%', lineStyle: { color: COLORS.down } }
+                ]
+            }
+        });
+    }
+
     CONFIG.charts.cb.setOption({
-        title:    { text: makeTitle('期限结构分数'), left: 'center', textStyle: { fontSize: 14 } },
+        title: { text: makeTitle('期限结构分数'), left: 'center', textStyle: { fontSize: 14 } },
+        legend: {
+            data: legendData,
+            top:  25,
+            textStyle: { fontSize: 11 }
+        },
         grid:     makeGrid(),
         xAxis:    makeXAxis(data.dates, false),
-        yAxis:    { type: 'value', splitArea: { show: true }, axisLabel: { formatter: v => v.toFixed(2), fontSize: 11 } },
+        yAxis:    yAxes,
         dataZoom: makeZoom(),
         tooltip:  makeSubTooltip((params) => {
-            const p = params[0];
-            if (!p) return '';
-            return `<span style="color:${COLORS.cb}">●</span>&nbsp;期限结构分数&nbsp;<b>${fmtCB(p.value)}</b>`;
+            let html = '';
+            params.forEach(p => {
+                if (p.seriesName === '期限结构分数' && p.value != null) {
+                    html += `<span style="color:${COLORS.cb}">●</span>&nbsp;期限结构分数&nbsp;<b>${fmtCB(p.value)}</b><br/>`;
+                } else if (p.seriesName === '历史分位数' && p.value != null) {
+                    html += `<span style="color:${COLORS.cbHistPct}">●</span>&nbsp;历史分位数&nbsp;<b>${fmtPct1(p.value)}</b><br/>`;
+                }
+            });
+            return html || '';
         }),
-        series: [{
-            name: '期限结构', type: 'line', data: data.cb,
-            lineStyle: { color: COLORS.cb, width: 2 }, itemStyle: { color: COLORS.cb }, symbol: 'circle', symbolSize: 3, connectNulls: true,
-            markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0 }], lineStyle: { color: '#999', type: 'dashed', width: 1.5 } }
-        }]
+        series
     }, { notMerge: true });
 }
 
@@ -738,8 +875,6 @@ function fmtNum(num) {
     if (abs >= 1e4) return (num / 1e4).toFixed(2) + '万';
     return Math.round(num).toString();
 }
-
-
 
 function updateDateRange(data) {
     if (!data || !data.length) return;
