@@ -24,6 +24,10 @@
     "display_name": "菜粕RM"
   },
   {
+    "filename": "农产品-油脂油料 豆一A 行情图表数据.csv",
+    "display_name": "豆一A"
+  },
+  {
     "filename": "农产品-油脂油料 豆二B 行情图表数据.csv",
     "display_name": "豆二B"
   },
@@ -162,6 +166,10 @@
   {
     "filename": "工业品-能化 对二甲苯PX 行情图表数据.csv",
     "display_name": "对二甲苯PX"
+  },
+  {
+    "filename": "工业品-能化 沥青BU 行情图表数据.csv",
+    "display_name": "沥青BU"
   },
   {
     "filename": "工业品-能化 焦煤JM 行情图表数据.csv",
