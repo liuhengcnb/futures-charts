@@ -265,8 +265,8 @@ function buildSeatTableBlock(title, dates, shortSeats, longSeats, matrix, colorS
         colMax[s] = vals.length ? Math.max(...vals.map(Math.abs)) : 1;
     });
 
-    const shortBg = colorScheme==='alt' ? 'rgba(156,39,176,0.10)' : 'rgba(239,83,80,0.10)';
-    const longBg  = colorScheme==='alt' ? 'rgba(67,160,71,0.10)'  : 'rgba(38,166,154,0.10)';
+    const shortBg = colorScheme==='alt' ? 'rgba(156,39,176,0.10)' : 'rgba(38,166,154,0.10)';
+    const longBg  = colorScheme==='alt' ? 'rgba(67,160,71,0.10)'  : 'rgba(239,83,80,0.10)';
     const latestDate = dates.length ? fmtSeatDate(dates[dates.length-1]) : '';
 
     let h = `<div class="seat-block">`;
@@ -293,9 +293,9 @@ function buildSeatTableBlock(title, dates, shortSeats, longSeats, matrix, colorS
             const pct    = Math.min(Math.abs(val)/(colMax[seat]||1)*86, 86).toFixed(1);
             const isPos  = val >= 0;
             const barStyle = isPos
-                ? `left:5%;width:${pct}%;background:rgba(38,166,154,0.35)`
-                : `right:5%;width:${pct}%;background:rgba(239,83,80,0.35)`;
-            const numColor = isPos ? '#0d6b63' : '#b71c1c';
+                ? `left:5%;width:${pct}%;background:rgba(239,83,80,0.35)`
+                : `right:5%;width:${pct}%;background:rgba(38,166,154,0.35)`;
+            const numColor = isPos ? '#b71c1c' : '#0d6b63';
             h += `<td class="st-cell">
                     <div class="st-bar" style="${barStyle}"></div>
                     <span class="st-val" style="color:${numColor}">${fmtSeatVal(val)}</span>
@@ -344,7 +344,7 @@ function makeXAxis(dates, showLabel) {
              axisLabel: showLabel ? {show:true,fontSize:10,color:'#666',interval:Math.max(0,Math.floor(dates.length/13)-1),formatter:v=>toDisplay(v)} : {show:false} };
 }
 function makeGrid(extra) { return {left:CONFIG.grid.left,right:CONFIG.grid.right,top:CONFIG.grid.top,bottom:CONFIG.grid.bottom+(extra||0),containLabel:false}; }
-function makeZoom() { return [{type:'inside',xAxisIndex:[0],start:50,end:100}]; }
+function makeZoom() { return [{type:'inside',xAxisIndex:[0],start:0,end:100}]; }
 function makeSubTooltip(fn) {
     return { trigger:'axis', confine:true, appendToBody:true,
              axisPointer:{type:'line',lineStyle:{color:'rgba(80,80,80,0.45)',type:'dashed',width:1}},
