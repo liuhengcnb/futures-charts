@@ -321,11 +321,17 @@ function buildSeatHTML(data) {
         if (!grp.seats||grp.seats.length===0) return;
         const lastIdx = dates.length - 1;
         const getLastVal = s => (grp.matrix[s]||[])[lastIdx] ?? 0;
-        const shortS = grp.seats.filter(s=>getLastVal(s)<0).sort((a,b)=>getLastVal(a)-getLastVal(b));
-        const longS  = grp.seats.filter(s=>getLastVal(s)>=0).sort((a,b)=>getLastVal(a)-getLastVal(b));
-        const fShort = shortS.length>0 ? shortS : [];
-        const fLong  = longS.length>0  ? longS  : grp.seats.slice().sort((a,b)=>getLastVal(a)-getLastVal(b));
-        html += buildSeatTableBlock(grp.name, dates, fShort, fLong, grp.matrix, 'alt');
+        // 按最新日期净多空正负拆分：
+        //   shortS：净空方向，升序（最空在左）
+        //   longS ：净多方向，升序（最少多在左，最多多在右）
+        // 若某方向为空（全部在同侧），该侧列不显示，不做 fallback
+        const shortS = grp.seats
+            .filter(s => getLastVal(s) < 0)
+            .sort((a, b) => getLastVal(a) - getLastVal(b));
+        const longS = grp.seats
+            .filter(s => getLastVal(s) >= 0)
+            .sort((a, b) => getLastVal(a) - getLastVal(b));
+        html += buildSeatTableBlock(grp.name, dates, shortS, longS, grp.matrix, 'alt');
     });
 
     html += `</div>`;
