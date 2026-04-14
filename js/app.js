@@ -371,7 +371,12 @@ function drawKlineChart(data) {
                      if(!params||!params.length)return'';
                      const k=params.find(p=>p.seriesName==='K线');
                      if(!k||!Array.isArray(k.value))return'';
-                     const[o,c,l,h]=k.value,clr=c>=o?COLORS.up:COLORS.down,chg=o>0?((c-o)/o*100):0;
+                     const[o,c,l,h]=k.value;
+                     // 涨跌幅用前一日收盘价计算（prevClose = 上一根K线的收盘值）
+                     const di=k.dataIndex;
+                     const prevC = di>0 ? data.ohlc[di-1][1] : o;
+                     const chg = prevC>0 ? ((c-prevC)/prevC*100) : 0;
+                     const clr = c>=prevC ? COLORS.up : COLORS.down;
                      const dP=params.find(p=>p.seriesName==='DKX'),mP=params.find(p=>p.seriesName==='MADKX');
                      const m5P=params.find(p=>p.seriesName==='MA5'),m20P=params.find(p=>p.seriesName==='MA20');
                      return`<div style="font-size:12px;line-height:2;min-width:220px">
