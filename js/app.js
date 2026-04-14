@@ -225,9 +225,11 @@ async function loadAndRenderSeat() {
     if (!name) { container.innerHTML='<p class="seat-msg">请先选择合约</p>'; return; }
     container.innerHTML='<p class="seat-msg" style="color:#667eea">加载席位数据…</p>';
     try {
-        const safe = name.replace(/[\/\s]/g,'_');
-        const resp = await fetch(`${CONFIG.seatDataPath}${encodeURIComponent(safe)}.json`);
-        if (!resp.ok) throw new Error('暂无席位数据（请先运行 Python 导出步骤）');
+        // 文件名与 Python 导出保持一致：/ 和空格替换为 _，不做 URL 编码（GitHub Pages 支持中文路径）
+        const safe = name.replace(/[\/\s]/g, '_');
+        const url  = `${CONFIG.seatDataPath}${safe}.json`;
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`暂无席位数据（HTTP ${resp.status}，文件：${safe}.json）`);
         const data = await resp.json();
         CONFIG.currentSeatData = data;
         container.innerHTML = buildSeatHTML(data);
