@@ -273,7 +273,7 @@ function buildSeatTableBlock(title, dates, shortSeats, longSeats, matrix, colorS
     if (title) h += `<div class="seat-block-title">${title}</div>`;
     h += `<div class="seat-scroll-wrap"><table class="seat-table"><thead>
         <tr>
-          <th class="st-corner" rowspan="2">${latestDate}<br><span class="st-corner-sub">最新→上</span></th>
+          <th class="st-corner" rowspan="2">${latestDate}<br><span class="st-corner-sub">旧→新↓</span></th>
           ${nShort>0?`<th class="st-group" colspan="${nShort}" style="background:${shortBg}">净空单前 ${nShort}</th>`:''}
           ${nLong>0 ?`<th class="st-group" colspan="${nLong}"  style="background:${longBg}">净多单前 ${nLong}</th>`:''}
         </tr><tr>
@@ -282,9 +282,9 @@ function buildSeatTableBlock(title, dates, shortSeats, longSeats, matrix, colorS
         </tr>
     </thead><tbody>`;
 
-    [...dates].reverse().forEach((date, ri) => {
-        const di      = dates.length - 1 - ri;
-        const isLatest = ri === 0;
+    // 正序渲染：旧日期在上，最新日期在底部
+    dates.forEach((date, di) => {
+        const isLatest = di === dates.length - 1;
         h += `<tr${isLatest?' class="st-row-latest"':''}>`;
         h += `<td class="st-date">${fmtSeatDate(date)}</td>`;
         allSeats.forEach(seat => {
