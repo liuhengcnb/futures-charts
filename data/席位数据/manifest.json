@@ -1,0 +1,312 @@
+[
+  {
+    "filename": "欧线EC.json",
+    "display_name": "欧线EC",
+    "category": "其他"
+  },
+  {
+    "filename": "棕榈油P.json",
+    "display_name": "棕榈油P",
+    "category": "农产品-油脂油料"
+  },
+  {
+    "filename": "玉米C.json",
+    "display_name": "玉米C",
+    "category": "农产品-油脂油料"
+  },
+  {
+    "filename": "花生PK.json",
+    "display_name": "花生PK",
+    "category": "农产品-油脂油料"
+  },
+  {
+    "filename": "菜油OI.json",
+    "display_name": "菜油OI",
+    "category": "农产品-油脂油料"
+  },
+  {
+    "filename": "菜粕RM.json",
+    "display_name": "菜粕RM",
+    "category": "农产品-油脂油料"
+  },
+  {
+    "filename": "豆二B.json",
+    "display_name": "豆二B",
+    "category": "农产品-油脂油料"
+  },
+  {
+    "filename": "豆油Y.json",
+    "display_name": "豆油Y",
+    "category": "农产品-油脂油料"
+  },
+  {
+    "filename": "豆粕M.json",
+    "display_name": "豆粕M",
+    "category": "农产品-油脂油料"
+  },
+  {
+    "filename": "棉花CF.json",
+    "display_name": "棉花CF",
+    "category": "农产品-软商品"
+  },
+  {
+    "filename": "生猪LH.json",
+    "display_name": "生猪LH",
+    "category": "农产品-软商品"
+  },
+  {
+    "filename": "白糖SR.json",
+    "display_name": "白糖SR",
+    "category": "农产品-软商品"
+  },
+  {
+    "filename": "红枣CJ.json",
+    "display_name": "红枣CJ",
+    "category": "农产品-软商品"
+  },
+  {
+    "filename": "苹果AP.json",
+    "display_name": "苹果AP",
+    "category": "农产品-软商品"
+  },
+  {
+    "filename": "鸡蛋JD.json",
+    "display_name": "鸡蛋JD",
+    "category": "农产品-软商品"
+  },
+  {
+    "filename": "三十年国债TL.json",
+    "display_name": "三十年国债TL",
+    "category": "国债"
+  },
+  {
+    "filename": "二年国债TS.json",
+    "display_name": "二年国债TS",
+    "category": "国债"
+  },
+  {
+    "filename": "五年国债TF.json",
+    "display_name": "五年国债TF",
+    "category": "国债"
+  },
+  {
+    "filename": "十年国债T.json",
+    "display_name": "十年国债T",
+    "category": "国债"
+  },
+  {
+    "filename": "尿素UR.json",
+    "display_name": "尿素UR",
+    "category": "工业品-其他"
+  },
+  {
+    "filename": "工业硅SI.json",
+    "display_name": "工业硅SI",
+    "category": "工业品-其他"
+  },
+  {
+    "filename": "橡胶RU.json",
+    "display_name": "橡胶RU",
+    "category": "工业品-其他"
+  },
+  {
+    "filename": "氧化铝AO.json",
+    "display_name": "氧化铝AO",
+    "category": "工业品-其他"
+  },
+  {
+    "filename": "烧碱SH.json",
+    "display_name": "烧碱SH",
+    "category": "工业品-其他"
+  },
+  {
+    "filename": "硅铁SF.json",
+    "display_name": "硅铁SF",
+    "category": "工业品-其他"
+  },
+  {
+    "filename": "碳酸锂LC.json",
+    "display_name": "碳酸锂LC",
+    "category": "工业品-其他"
+  },
+  {
+    "filename": "纸浆SP.json",
+    "display_name": "纸浆SP",
+    "category": "工业品-其他"
+  },
+  {
+    "filename": "玻璃FG.json",
+    "display_name": "玻璃FG",
+    "category": "工业品-建材"
+  },
+  {
+    "filename": "纯碱SA.json",
+    "display_name": "纯碱SA",
+    "category": "工业品-建材"
+  },
+  {
+    "filename": "螺纹钢RB.json",
+    "display_name": "螺纹钢RB",
+    "category": "工业品-建材"
+  },
+  {
+    "filename": "铁矿石I.json",
+    "display_name": "铁矿石I",
+    "category": "工业品-建材"
+  },
+  {
+    "filename": "锰硅SM.json",
+    "display_name": "锰硅SM",
+    "category": "工业品-建材"
+  },
+  {
+    "filename": "20号胶NR.json",
+    "display_name": "20号胶NR",
+    "category": "工业品-能化"
+  },
+  {
+    "filename": "LPGPG.json",
+    "display_name": "LPGPG",
+    "category": "工业品-能化"
+  },
+  {
+    "filename": "PTATA.json",
+    "display_name": "PTATA",
+    "category": "工业品-能化"
+  },
+  {
+    "filename": "PVCV.json",
+    "display_name": "PVCV",
+    "category": "工业品-能化"
+  },
+  {
+    "filename": "乙二醇EG.json",
+    "display_name": "乙二醇EG",
+    "category": "工业品-能化"
+  },
+  {
+    "filename": "塑料L.json",
+    "display_name": "塑料L",
+    "category": "工业品-能化"
+  },
+  {
+    "filename": "对二甲苯PX.json",
+    "display_name": "对二甲苯PX",
+    "category": "工业品-能化"
+  },
+  {
+    "filename": "焦煤JM.json",
+    "display_name": "焦煤JM",
+    "category": "工业品-能化"
+  },
+  {
+    "filename": "燃油FU.json",
+    "display_name": "燃油FU",
+    "category": "工业品-能化"
+  },
+  {
+    "filename": "甲醇MA.json",
+    "display_name": "甲醇MA",
+    "category": "工业品-能化"
+  },
+  {
+    "filename": "短纤PF.json",
+    "display_name": "短纤PF",
+    "category": "工业品-能化"
+  },
+  {
+    "filename": "聚丙烯PP.json",
+    "display_name": "聚丙烯PP",
+    "category": "工业品-能化"
+  },
+  {
+    "filename": "苯乙烯EB.json",
+    "display_name": "苯乙烯EB",
+    "category": "工业品-能化"
+  },
+  {
+    "filename": "沪铅PB.json",
+    "display_name": "沪铅PB",
+    "category": "有色金属"
+  },
+  {
+    "filename": "沪铜CU.json",
+    "display_name": "沪铜CU",
+    "category": "有色金属"
+  },
+  {
+    "filename": "沪铝AL.json",
+    "display_name": "沪铝AL",
+    "category": "有色金属"
+  },
+  {
+    "filename": "沪银AG.json",
+    "display_name": "沪银AG",
+    "category": "有色金属"
+  },
+  {
+    "filename": "沪锌ZN.json",
+    "display_name": "沪锌ZN",
+    "category": "有色金属"
+  },
+  {
+    "filename": "沪锡SN.json",
+    "display_name": "沪锡SN",
+    "category": "有色金属"
+  },
+  {
+    "filename": "沪镍NI.json",
+    "display_name": "沪镍NI",
+    "category": "有色金属"
+  },
+  {
+    "filename": "上证50IH.json",
+    "display_name": "上证50IH",
+    "category": "股指"
+  },
+  {
+    "filename": "中证1000IM.json",
+    "display_name": "中证1000IM",
+    "category": "股指"
+  },
+  {
+    "filename": "中证500IC.json",
+    "display_name": "中证500IC",
+    "category": "股指"
+  },
+  {
+    "filename": "沪深300IF.json",
+    "display_name": "沪深300IF",
+    "category": "股指"
+  },
+  {
+    "filename": "沪金AU.json",
+    "display_name": "沪金AU",
+    "category": "黄金"
+  },
+  {
+    "filename": "丁二烯橡胶BR.json",
+    "display_name": "丁二烯橡胶BR",
+    "category": "工业品-能化"
+  },
+  {
+    "filename": "瓶片PR.json",
+    "display_name": "瓶片PR",
+    "category": "工业品-能化"
+  },
+  {
+    "filename": "多晶硅PS.json",
+    "display_name": "多晶硅PS",
+    "category": "工业品-其他"
+  },
+  {
+    "filename": "豆一A.json",
+    "display_name": "豆一A",
+    "category": "农产品-油脂油料"
+  },
+  {
+    "filename": "沥青BU.json",
+    "display_name": "沥青BU",
+    "category": "工业品-能化"
+  }
+]
