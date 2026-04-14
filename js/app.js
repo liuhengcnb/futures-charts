@@ -103,8 +103,10 @@ function switchTab(tab) {
     CONFIG.currentTab = tab;
     document.getElementById('tab-chart').classList.toggle('active', tab==='chart');
     document.getElementById('tab-seat').classList.toggle('active',  tab==='seat');
+    // charts-container 无 CSS display:none，用 '' 即可恢复默认 block
     document.getElementById('charts-container').style.display = tab==='chart' ? '' : 'none';
-    document.getElementById('seat-container').style.display   = tab==='seat'  ? '' : 'none';
+    // seat-container 有 CSS display:none，必须显式设 'block' 才能覆盖它
+    document.getElementById('seat-container').style.display   = tab==='seat'  ? 'block' : 'none';
     document.getElementById('date-controls').style.display    = tab==='chart' ? '' : 'none';
     if (tab === 'seat' && CONFIG.currentContractName) loadAndRenderSeat();
 }
