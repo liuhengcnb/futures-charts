@@ -1,6 +1,6 @@
 // ==================== 全局配置 ====================
 const CONFIG = {
-    dataPath:            'data/',
+    dataPath:            'data/行情图表数据/',
     seatDataPath:        'data/席位数据/',
     charts:              {},
     currentDates:        [],
@@ -249,19 +249,12 @@ function fmtSeatDate(d) {
 
 /**
  * 构建单张席位表 HTML
- * @param {string}   title       - 表格标题（合约名或席位组名）
- * @param {string[]} dates       - 日期数组（顺序）
- * @param {string[]} shortSeats  - 净空席位列表（升序：最空在左）
- * @param {string[]} longSeats   - 净多席位列表（升序：最少多在左）
- * @param {Object}   matrix      - {席位名: [v0,v1,...]} 与 dates 对齐
- * @param {string}   colorScheme - 'main'|'alt'
  */
 function buildSeatTableBlock(title, dates, shortSeats, longSeats, matrix, colorScheme) {
     const allSeats = [...shortSeats, ...longSeats];
     const nShort   = shortSeats.length;
     const nLong    = longSeats.length;
 
-    // 每列独立最大绝对值（色条按列缩放，不同列之间不影响）
     const colMax = {};
     allSeats.forEach(s => {
         const vals = (matrix[s]||[]).filter(v=>v!==null&&!isNaN(v));
@@ -285,7 +278,6 @@ function buildSeatTableBlock(title, dates, shortSeats, longSeats, matrix, colorS
         </tr>
     </thead><tbody>`;
 
-    // 最新日期显示在顶部
     [...dates].reverse().forEach((date, ri) => {
         const di      = dates.length - 1 - ri;
         const isLatest = ri === 0;
@@ -316,18 +308,15 @@ function buildSeatHTML(data) {
     const { contract, dates, short_seats, long_seats, matrix, custom_groups } = data;
     let html = `<div class="seat-page">`;
 
-    // ── 主表：全市场 Top N 多空席位 ──
     html += buildSeatTableBlock(
         `${contract}　全市场前 ${long_seats.length} 名多空席位`,
         dates, short_seats, long_seats, matrix, 'main'
     );
 
-    // ── 自定义席位组 ──
     (custom_groups||[]).forEach(grp => {
         if (!grp.seats||grp.seats.length===0) return;
         const lastIdx = dates.length - 1;
         const getLastVal = s => (grp.matrix[s]||[])[lastIdx] ?? 0;
-        // 按最新净多空正负拆分两边，各自升序排列
         const shortS = grp.seats.filter(s=>getLastVal(s)<0).sort((a,b)=>getLastVal(a)-getLastVal(b));
         const longS  = grp.seats.filter(s=>getLastVal(s)>=0).sort((a,b)=>getLastVal(a)-getLastVal(b));
         const fShort = shortS.length>0 ? shortS : [];
